@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>veditor</title>
+    <!-- 内联图标：避免 favicon.ico 的 404 污染控制台 -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23534AB7'/%3E%3C/svg%3E"
+    />
+    <style>
+      /* 阻断页内联样式：不依赖构建产物，file:// 下也能正确渲染 */
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        font:
+          13px/1.6 -apple-system,
+          "Segoe UI",
+          "Microsoft YaHei",
+          system-ui,
+          sans-serif;
+        color: #1f1f1f;
+        background: #fff;
+      }
+      #boot-block {
+        display: flex;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 24px;
+        text-align: center;
+      }
+      #boot-block[hidden] {
+        display: none;
+      }
+      #boot-block .boot-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      #boot-block .boot-detail {
+        font-size: 12px;
+        color: #8a8a8a;
+        max-width: 460px;
+      }
+      #boot-block code {
+        font-size: 12px;
+        background: #f2f2f2;
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+    </style>
+    <!-- esbuild 把 src/styles/app.css 单独产出为 main.css（不会自动注入），必须显式引用 -->
+    <link rel="stylesheet" href="./main.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="boot-block" hidden role="alert" data-v="boot-block">
+      <div class="boot-title" id="boot-title">需要通过本地服务器打开</div>
+      <div class="boot-detail" id="boot-detail">
+        直接双击 HTML 文件时，浏览器会拦截脚本加载（<code>file://</code> 的安全限制），所以编辑器无法启动。
+        请运行 <code>npm run dev</code>，然后打开终端显示的 <code>http://127.0.0.1:端口</code>。
+      </div>
+    </div>
+    <script>
+      // 启动自检（经典脚本，file:// 下也能执行）。
+      // 两种成因文案不同：
+      //   file://            → 模块脚本被 CORS 拦截（API 其实存在），该做的是"起本地服务器"；
+      //   非安全上下文        → WebCodecs / 文件句柄确实不存在，该做的是"换 127.0.0.1 或 HTTPS"。
+      (function () {
+        var isFile = window.location.protocol === 'file:';
+        var insecure = window.isSecureContext !== true;
+        if (!isFile && !insecure) return;
+        window.__veditorBlocked = true;
+        var title = document.getElementById('boot-title');
+        var detail = document.getElementById('boot-detail');
+        if (!isFile && insecure) {
+          if (title) title.textContent = '需要安全上下文：请通过 http://127.0.0.1 或 HTTPS 打开';
+          if (detail) {
+            detail.textContent =
+              '当前页面不在安全上下文中，WebCodecs 与文件句柄能力不可用。请运行 npm run dev 后打开终端显示的 127.0.0.1 地址，或部署到 HTTPS。';
+          }
+        } else if (detail) {
+          detail.innerHTML =
+            '直接双击 HTML 文件时，浏览器会拦截脚本加载（<code>file://</code> 的安全限制），所以编辑器无法启动。' +
+            '请运行 <code>npm run dev</code>，然后打开终端显示的 <code>http://127.0.0.1:端口</code>。' +
+            '（导出分发时同理：不要用 <code>file://</code> 打开 <code>dist/index.html</code>。）';
+        }
+        var block = document.getElementById('boot-block');
+        if (block) block.hidden = false;
+        var root = document.getElementById('root');
+        if (root) root.hidden = true;
+        document.documentElement.setAttribute('data-v-state', 'blocked');
+      })();
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

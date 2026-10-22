@@ -1,0 +1,174 @@
+%% veditor · 核心数据结构类图
+%% 与 docs/architecture.md §4.2 同源；类名与 TS interface 一一对应
+classDiagram
+  class Project {
+    +string id
+    +string name
+    +MilliFps fpsMilli
+    +number width
+    +number height
+    +48000 sampleRate
+    +Track[] tracks
+    +Asset[] assets
+    +Frame playheadFrame
+    +number zoomLevel
+    +number schemaVersion
+  }
+  class Track {
+    +string id
+    +string kind
+    +string name
+    +number order
+    +boolean muted
+    +boolean hidden
+    +Clip[] clips
+  }
+  class Clip {
+    +string id
+    +string assetId
+    +string trackId
+    +Frame startFrame
+    +Frame inFrame
+    +Frame outFrame
+    +Frame durationFrames
+    +number speedMilli
+    +Transform transform
+    +ClipAudio audio
+  }
+  class Transform {
+    +number scale
+    +number x
+    +number y
+    +number opacity
+    +BlendMode blendMode
+  }
+  class Asset {
+    +string id
+    +string handleRef
+    +string sourceMode
+    +string status
+    +MilliFps fpsMilli
+    +Frame durationFrames
+    +boolean hasAudio
+    +boolean exactSeek
+    +string hashKey
+  }
+  class ClipOperation {
+    <<union>>
+    +string op
+    +string clipId
+  }
+  class UndoEntry {
+    +string id
+    +string label
+    +ClipOperation[] ops
+    +ClipOperation[] inverses
+    +string source
+  }
+  class UndoStack {
+    +UndoEntry[] past
+    +UndoEntry[] future
+    +push(entry)
+    +undo()
+    +redo()
+  }
+  class ProjectStore {
+    +dispatch(ops, label, source)
+    +beginTransaction(cfg) Transaction
+    +commit(tx)
+    +cancel(tx)
+    +undo() RedoResult
+    +redo() RedoResult
+    +subscribe(cb) unsubscribe
+  }
+  class Transaction {
+    +string mergeKey
+    +string label
+    +Map ops
+    +DragDraft draft
+    +upsert(op)
+    +setDraft(draft)
+    +commit()
+    +cancel()
+  }
+  class EphemeralState {
+    +string selectedClipId
+    +DragDraft drag
+    +OverlayMark[] overlayMarks
+    +boolean isPlaying
+    +VEditorError[] errors
+  }
+  class Timebase {
+    <<module pure>>
+    +frameToUs(frame, milliFps) Us
+    +usToFrame(us, fps) Frame
+    +frameToSample(frame, fps, rate) number
+    +projectSpanFrames(assetSpan, assetMilliFps, projectMilliFps) Frame
+    +mapProjectFrameToAssetFrame(projectFrame, clip, asset) Frame
+  }
+  class Transport {
+    +play()
+    +pause()
+    +seekTo(frame, mode)
+    +currentFrame() Frame
+    +Anchor anchor
+  }
+  class PlaybackEngine {
+    +string mode
+    +preroll(frame)
+    +renderFrame(frame) FrameResult
+    +renderFrameExact(frame, epoch) FrameResult
+    +dispose()
+  }
+  class DecoderPool {
+    +ensureFrame(assetId, assetFrame, epoch)
+    +seek(assetId, assetFrame, epoch)
+    +release(assetId)
+    +stats() PoolStats
+  }
+  class AudioEngine {
+    +prime(frame)
+    +schedule(frame)
+    +start()
+    +stop()
+    +now() number
+  }
+  class Compositor {
+    +string kind
+    +beginFrame(projectFrame, clear)
+    +drawLayer(source, transform)
+    +endFrame()
+    +captureFrame() ImageBitmap
+  }
+  class TimelinePainter {
+    +paint(ctx, state)
+    +requestPaint()
+  }
+  class HostAdapter {
+    <<interface>>
+    +getInitialSource() InitialSource
+    +onCommand(cb)
+    +postEvent(evt)
+    +getAIModel() AIModelPort
+  }
+
+  Project "1" *-- "0..*" Track
+  Project "1" *-- "0..*" Asset
+  Track "1" *-- "0..*" Clip
+  Clip "1" *-- "1" Transform
+  Clip "0..*" --> "1" Asset : assetId
+  ClipOperation ..> Clip : mutates
+  UndoEntry "1" *-- "1..*" ClipOperation
+  ProjectStore "1" *-- "1" UndoStack
+  ProjectStore "1" *-- "1" EphemeralState
+  ProjectStore "1" *-- "0..1" Transaction
+  ProjectStore ..> ClipOperation : applies
+  ProjectStore ..> Timebase : uses
+  Transaction ..> ClipOperation : collects
+  Transport --> AudioEngine : master clock
+  Transport --> PlaybackEngine : drives
+  PlaybackEngine --> DecoderPool
+  PlaybackEngine --> Compositor
+  PlaybackEngine ..> Timebase
+  TimelinePainter ..> Timebase
+  HostAdapter ..> ProjectStore : mount

@@ -1,0 +1,684 @@
+{
+  "generatedAt": "2026-10-19T17:05:35.995Z",
+  "fixtures": [
+    {
+      "file": "24fps.mp4",
+      "relPath": "compat/24fps.mp4",
+      "sizeBytes": 419782,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "type": "moov",
+          "offset": 32,
+          "size": 4452
+        },
+        {
+          "type": "free",
+          "offset": 4484,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 4492,
+          "size": 415290
+        }
+      ],
+      "moovBeforeMdat": true,
+      "video": {
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 24000,
+        "frameCount": 96,
+        "hasBFrames": true,
+        "pixFmt": "yuv420p",
+        "profile": "High"
+      },
+      "audio": {
+        "codec": "aac",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 1,
+      "keyframeTimesSec": [
+        0
+      ],
+      "keyframeFrames": [
+        0
+      ]
+    },
+    {
+      "file": "60fps.mp4",
+      "relPath": "compat/60fps.mp4",
+      "sizeBytes": 635698,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "type": "moov",
+          "offset": 32,
+          "size": 7960
+        },
+        {
+          "type": "free",
+          "offset": 7992,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 8000,
+          "size": 627698
+        }
+      ],
+      "moovBeforeMdat": true,
+      "video": {
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 60000,
+        "frameCount": 240,
+        "hasBFrames": true,
+        "pixFmt": "yuv420p",
+        "profile": "High"
+      },
+      "audio": {
+        "codec": "aac",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 1,
+      "keyframeTimesSec": [
+        0
+      ],
+      "keyframeFrames": [
+        0
+      ]
+    },
+    {
+      "file": "audioonly.mp4",
+      "relPath": "compat/audioonly.mp4",
+      "sizeBytes": 36432,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 28
+        },
+        {
+          "type": "free",
+          "offset": 28,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 36,
+          "size": 34918
+        },
+        {
+          "type": "moov",
+          "offset": 34954,
+          "size": 1478
+        }
+      ],
+      "moovBeforeMdat": false,
+      "video": null,
+      "audio": {
+        "codec": "aac",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 0,
+      "keyframeTimesSec": [],
+      "keyframeFrames": []
+    },
+    {
+      "file": "faststart-bframes.mp4",
+      "relPath": "compat/faststart-bframes.mp4",
+      "sizeBytes": 463862,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "type": "moov",
+          "offset": 32,
+          "size": 5616
+        },
+        {
+          "type": "free",
+          "offset": 5648,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 5656,
+          "size": 458206
+        }
+      ],
+      "moovBeforeMdat": true,
+      "video": {
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": 120,
+        "hasBFrames": true,
+        "pixFmt": "yuv420p",
+        "profile": "High"
+      },
+      "audio": {
+        "codec": "aac",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 4,
+      "keyframeTimesSec": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "keyframeFrames": [
+        0,
+        30,
+        60,
+        90
+      ]
+    },
+    {
+      "file": "hevc.mp4",
+      "relPath": "compat/hevc.mp4",
+      "sizeBytes": 252876,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 28
+        },
+        {
+          "type": "free",
+          "offset": 28,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 36,
+          "size": 248033
+        },
+        {
+          "type": "moov",
+          "offset": 248069,
+          "size": 4807
+        }
+      ],
+      "moovBeforeMdat": false,
+      "video": {
+        "codec": "hevc",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": 120,
+        "hasBFrames": true,
+        "pixFmt": "yuv420p",
+        "profile": "Main"
+      },
+      "audio": null,
+      "keyframeCount": 1,
+      "keyframeTimesSec": [
+        0
+      ],
+      "keyframeFrames": [
+        0
+      ]
+    },
+    {
+      "file": "longgop.mp4",
+      "relPath": "compat/longgop.mp4",
+      "sizeBytes": 875742,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "type": "moov",
+          "offset": 32,
+          "size": 9880
+        },
+        {
+          "type": "free",
+          "offset": 9912,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 9920,
+          "size": 865822
+        }
+      ],
+      "moovBeforeMdat": true,
+      "video": {
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": 240,
+        "hasBFrames": true,
+        "pixFmt": "yuv420p",
+        "profile": "High"
+      },
+      "audio": {
+        "codec": "aac",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 1,
+      "keyframeTimesSec": [
+        0
+      ],
+      "keyframeFrames": [
+        0
+      ]
+    },
+    {
+      "file": "long_ntsc.mp4",
+      "relPath": "compat/long_ntsc.mp4",
+      "sizeBytes": 54483583,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "type": "free",
+          "offset": 32,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 40,
+          "size": 54457873
+        },
+        {
+          "type": "moov",
+          "offset": 54457913,
+          "size": 25670
+        }
+      ],
+      "moovBeforeMdat": false,
+      "video": {
+        "codec": "h264",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 23976,
+        "frameCount": 6000,
+        "hasBFrames": false,
+        "pixFmt": "yuv420p",
+        "profile": "Constrained Baseline"
+      },
+      "audio": null,
+      "keyframeCount": 25,
+      "keyframeTimesSec": [
+        0,
+        10.01,
+        20.02,
+        30.03,
+        40.04,
+        50.05,
+        60.06,
+        70.07,
+        80.08,
+        90.09,
+        100.1,
+        110.11,
+        120.12,
+        130.13,
+        140.14,
+        150.15,
+        160.16,
+        170.17,
+        180.18,
+        190.19
+      ],
+      "keyframeFrames": [
+        0,
+        240,
+        480,
+        720,
+        960,
+        1200,
+        1440,
+        1680,
+        1920,
+        2160,
+        2400,
+        2640,
+        2880,
+        3120,
+        3360,
+        3600,
+        3840,
+        4080,
+        4320,
+        4560
+      ]
+    },
+    {
+      "file": "webm-longgop.webm",
+      "relPath": "compat/webm-longgop.webm",
+      "sizeBytes": 779835,
+      "container": "webm",
+      "hasCues": true,
+      "cuePointCount": 1,
+      "cueTimesMs": [
+        0
+      ],
+      "clusterCount": 2,
+      "durationFromInfoSec": 8.008,
+      "topLevelOrder": [
+        "EBML",
+        "Segment"
+      ],
+      "video": {
+        "codec": "vp9",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": 240,
+        "hasBFrames": false,
+        "pixFmt": "yuv420p",
+        "profile": "Profile 0"
+      },
+      "audio": {
+        "codec": "opus",
+        "sampleRate": 48000,
+        "channels": 1
+      },
+      "keyframeCount": 240,
+      "keyframeTimesSec": [
+        0,
+        0.033,
+        0.067,
+        0.1,
+        0.133,
+        0.167,
+        0.2,
+        0.233,
+        0.267,
+        0.3,
+        0.333,
+        0.367,
+        0.4,
+        0.433,
+        0.467,
+        0.5,
+        0.533,
+        0.567,
+        0.6,
+        0.633
+      ],
+      "keyframeFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "file": "webm-nocues.webm",
+      "relPath": "compat/webm-nocues.webm",
+      "sizeBytes": 414386,
+      "container": "webm",
+      "hasCues": false,
+      "cuePointCount": 0,
+      "cueTimesMs": [],
+      "clusterCount": 12,
+      "durationFromInfoSec": null,
+      "topLevelOrder": [
+        "EBML",
+        "Segment"
+      ],
+      "video": {
+        "codec": "vp8",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": null,
+        "hasBFrames": false,
+        "pixFmt": "yuv420p",
+        "profile": "0"
+      },
+      "audio": {
+        "codec": "vorbis",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 4,
+      "keyframeTimesSec": [
+        0.003,
+        1.003,
+        2.003,
+        3.003
+      ],
+      "keyframeFrames": [
+        0,
+        30,
+        60,
+        90
+      ]
+    },
+    {
+      "file": "webm-vp8-vorbis.webm",
+      "relPath": "compat/webm-vp8-vorbis.webm",
+      "sizeBytes": 414461,
+      "container": "webm",
+      "hasCues": true,
+      "cuePointCount": 4,
+      "cueTimesMs": [
+        3,
+        1003,
+        2003,
+        3003
+      ],
+      "clusterCount": 4,
+      "durationFromInfoSec": 4.003,
+      "topLevelOrder": [
+        "EBML",
+        "Segment"
+      ],
+      "video": {
+        "codec": "vp8",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": 120,
+        "hasBFrames": false,
+        "pixFmt": "yuv420p",
+        "profile": "0"
+      },
+      "audio": {
+        "codec": "vorbis",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 4,
+      "keyframeTimesSec": [
+        0.003,
+        1.003,
+        2.003,
+        3.003
+      ],
+      "keyframeFrames": [
+        0,
+        30,
+        60,
+        90
+      ]
+    },
+    {
+      "file": "webm-vp9-opus.webm",
+      "relPath": "compat/webm-vp9-opus.webm",
+      "sizeBytes": 449565,
+      "container": "webm",
+      "hasCues": true,
+      "cuePointCount": 4,
+      "cueTimesMs": [
+        0,
+        1000,
+        2000,
+        3000
+      ],
+      "clusterCount": 4,
+      "durationFromInfoSec": 4.008,
+      "topLevelOrder": [
+        "EBML",
+        "Segment"
+      ],
+      "video": {
+        "codec": "vp9",
+        "width": 640,
+        "height": 360,
+        "fpsMilli": 30000,
+        "frameCount": 120,
+        "hasBFrames": false,
+        "pixFmt": "yuv420p",
+        "profile": "Profile 0"
+      },
+      "audio": {
+        "codec": "opus",
+        "sampleRate": 48000,
+        "channels": 1
+      },
+      "keyframeCount": 120,
+      "keyframeTimesSec": [
+        0,
+        0.033,
+        0.067,
+        0.1,
+        0.133,
+        0.167,
+        0.2,
+        0.233,
+        0.267,
+        0.3,
+        0.333,
+        0.367,
+        0.4,
+        0.433,
+        0.467,
+        0.5,
+        0.533,
+        0.567,
+        0.6,
+        0.633
+      ],
+      "keyframeFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ]
+    },
+    {
+      "file": "sample-720p.mp4",
+      "relPath": "sample-720p.mp4",
+      "sizeBytes": 2871865,
+      "container": "mp4",
+      "structure": [
+        {
+          "type": "ftyp",
+          "offset": 0,
+          "size": 32
+        },
+        {
+          "type": "free",
+          "offset": 32,
+          "size": 8
+        },
+        {
+          "type": "mdat",
+          "offset": 40,
+          "size": 2862027
+        },
+        {
+          "type": "moov",
+          "offset": 2862067,
+          "size": 9798
+        }
+      ],
+      "moovBeforeMdat": false,
+      "video": {
+        "codec": "h264",
+        "width": 1280,
+        "height": 720,
+        "fpsMilli": 30000,
+        "frameCount": 240,
+        "hasBFrames": true,
+        "pixFmt": "yuv420p",
+        "profile": "High"
+      },
+      "audio": {
+        "codec": "aac",
+        "sampleRate": 44100,
+        "channels": 1
+      },
+      "keyframeCount": 1,
+      "keyframeTimesSec": [
+        0
+      ],
+      "keyframeFrames": [
+        0
+      ]
+    }
+  ]
+}

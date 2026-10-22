@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+dist/
+tests/.tmp/
+tests/.cache/
+*.log
+
+# 测试素材：体积大（合计 ~188MB），用生成脚本重建
+#   node tests/fixtures/compat/gen-baseline.cjs
+# 保留：*.json（基准数据）、*.cjs（生成/分析脚本）、ref/*.png（比对参考帧，1.3MB）
+tests/fixtures/**/*.mp4
+tests/fixtures/**/*.webm
+tests/fixtures/**/*.mov
+tests/fixtures/**/*.m4a
+tests/fixtures/**/*.mp3
+tests/fixtures/**/*.wav
+
+# 工具缓存（旧版 AI 会话目录；当前项目记忆在 .workbuddy-ai/memory/，那个要提交）
+.workbuddy/
+
+# 临时补丁/调试脚本
+.tmp_*
+tmp_*
+
+# 系统垃圾
+.DS_Store
+Thumbs.db

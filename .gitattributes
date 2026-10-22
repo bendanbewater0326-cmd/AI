@@ -1,0 +1,23 @@
+# 统一行尾：仓库内存 LF，工作区按平台检出（Windows 上是 CRLF）
+#
+# 为什么必须显式写：这个仓库在 Windows 上开发，历史文件里 CRLF / LF 混用
+# （`file` 抽查 50 个文件里有 25 个是 CRLF）。不统一的话，
+# 每次跨平台提交都会出现"整文件被改动"的假 diff，review 时看不出真正改了什么。
+* text=auto eol=lf
+
+# 二进制：不做行尾转换、不做文本 diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.mp4 binary
+*.webm binary
+*.m4a binary
+*.mp3 binary
+*.wav binary
+*.woff binary
+*.woff2 binary
+
+# 锁文件：不参与 diff（太长，review 时只会刷屏）
+package-lock.json -diff

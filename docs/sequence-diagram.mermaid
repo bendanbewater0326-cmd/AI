@@ -1,0 +1,42 @@
+%% veditor · 播放循环时序图（核心：解码 → 合成 → 上屏）
+%% 与 docs/architecture.md §6.2 同源；§6.1 导入上轨、§6.3 拖动提交撤销、§6.4 seek 帧精确 见文档
+%% 注：一个 .mermaid 文件只能包含一个图；其余三个时序图请从 architecture.md §6 复制
+sequenceDiagram
+  autonumber
+  participant U as 用户(Space)
+  participant TR as media/playbackClock (Transport)
+  participant AE as media/audioEngine
+  participant PE as media/playbackEngine
+  participant DP as media/decoderPool
+  participant CP as render/compositor
+  participant CV as 可见 canvas
+  participant PH as 播放头 DOM
+  participant PB as core/store playheadBus
+
+  U->>TR: play()
+  TR->>AE: prime(startFrame)（预取 500ms PCM）
+  TR->>PE: preroll(startFrame, 15 帧)
+  PE->>DP: seek(assetId, mapProjectFrameToAssetFrame(startFrame)) → 关键帧回退解码到目标
+  DP-->>PE: 目标帧就绪（缓存 15 帧）
+  TR->>AE: start(when = audioCtx.currentTime + 20ms)
+  TR->>TR: anchor = { frame: startFrame, time: audioCtx.currentTime + 20ms }
+
+  loop 每个 rAF（≈16.7ms）
+    TR->>TR: frame = anchor.frame + floor((clockNow() - anchor.time) * fps)
+    TR->>AE: schedule(frame)（滚动补 PCM，保持 300ms 前瞻）
+    TR->>PE: renderFrame(frame)（异步但不 await 时钟）
+    alt 帧缓存命中
+      PE->>CP: beginFrame → drawLayer(V1) → drawLayer(V2) → endFrame
+    else 未命中（不阻塞）
+      PE->>CP: 复用上一帧（exact=false）并触发 decodeAhead(500ms)
+      Note right of PE: 稳态缓存深度 ≥ 8 帧，命中率 > 98%，音画偏差 ≤ 1 帧
+    end
+    CP->>CV: WebGL 同帧提交（无额外拷贝）
+    TR->>PB: emit('playhead', frame)
+    PB->>PH: style.transform = translateX(frame × zoomLevel)
+    TR->>TR: frame ≥ durationFrames → pause()（不回绕 R-007）
+  end
+
+  U->>TR: Space（pause）
+  TR->>AE: stop()（AudioBufferSourceNode.stop + 释放调度队列）
+  TR->>TR: 保持 playheadFrame = 暂停时刻帧

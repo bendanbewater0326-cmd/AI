@@ -1,0 +1,1808 @@
+/*
+ * veditor 设计令牌 + 四区布局（架构 §14.5 / PRD §7.1）
+ *
+ * 极简审美硬约束：无阴影、无渐变、圆角 ≤ 4px、字号 ≥ 11px、0.5px 边框、主色 #534AB7。
+ * 尺寸硬约束：顶栏 32px / 左右栏 110px / 时间线默认 220px（可拖 160px–60vh）/ 播放控件条 36px。
+ */
+
+:root {
+  /* 尺寸 */
+  --v-topbar-h: 32px;
+  --v-rail-w: 110px;
+  --v-ctrlbar-h: 36px;
+  --v-timeline-h: 220px;
+  --v-timeline-min-h: 160px;
+  --v-tl-toolbar-h: 28px;
+  --v-tl-ruler-h: 24px;
+  --v-track-h: 56px;
+  /* 时间轴几何（唯一来源是 core/trackLayout.ts，这里只是给 CSS 用） */
+  --v-tl-head-w: 130px;
+  --v-tl-scale-h: 24px;
+  --v-tl-radius: 2px;
+  --v-handle-w: 8px;
+  --v-splitter-h: 4px;
+  --v-thumb-w: 90px;
+  --v-thumb-h: 51px;
+  --v-radius: 4px;
+
+  /* 色板 */
+  --v-bg: #ffffff;
+  --v-surface: #fafafa;
+  --v-surface-2: #f2f2f2;
+  --v-border: #e4e4e4;
+  --v-fg: #1f1f1f;
+  --v-fg-dim: #8a8a8a;
+  --v-accent: #1677ff;
+  --v-accent-weak: #e6f4ff;
+  --v-clip: #d9d7f0;
+  --v-track: #f7f7f7;
+  /* 轨道分类型底色：视频浅灰 / 音频浅蓝 / 字幕最浅（规范 §2.3） */
+  --v-tl-track-video-bg: #f5f5f5;
+  --v-tl-track-video-bg-active: #e8e8e8;
+  --v-tl-track-audio-bg: #f0f7ff;
+  --v-tl-track-text-bg: #fafafa;
+  --v-tl-track-border: #e8e8e8;
+  --v-tl-text: #262626;
+  --v-tl-text-dim: #8c8c8c;
+  /* 离线角标（时间线与素材卡共用，保证两处红一致） */
+  --v-tl-offline: #d4380d;
+  --v-warn: #8a6d1f;
+  --v-warn-bg: #fdf6e3;
+  --v-error: #c0392b;
+
+  /* 交互 */
+  --v-focus-ring: 2px;
+  --v-selected-outline: 2px;
+
+  /* 层级 */
+  --v-z-overlay: 10;
+  --v-z-playhead: 20;
+  --v-z-snapline: 21;
+  --v-z-commandbar: 100;
+
+  /* 动效 */
+  --v-dur-fast: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --v-dur-fast: 0ms;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font:
+    12px/1.4 -apple-system,
+    "Segoe UI",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
+  color: var(--v-fg);
+  background: var(--v-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0.5px solid var(--v-border);
+  background: var(--v-surface);
+  border-radius: var(--v-radius);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  color: var(--v-fg-dim);
+  background: var(--v-surface-2);
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: var(--v-focus-ring) solid var(--v-accent);
+  outline-offset: 1px;
+}
+
+/* ---------- 四区骨架 ---------- */
+
+.v-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--v-bg);
+  position: relative;
+  min-height: 0;
+}
+
+/* 工作区：错误条以绝对定位覆盖（不改变四区尺寸）+ 中列 + 时间线 */
+.v-workspace {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) var(--v-timeline-h);
+}
+
+/* 顶栏 32px */
+.v-topbar {
+  flex: 0 0 var(--v-topbar-h);
+  height: var(--v-topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+  border-bottom: 0.5px solid var(--v-border);
+  background: var(--v-surface);
+  font-size: 12px;
+}
+
+.v-topbar__name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.v-topbar__params {
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  white-space: nowrap;
+  background: transparent;
+  border-color: transparent;
+  padding: 2px 4px;
+}
+
+.v-topbar__params:hover {
+  border-color: var(--v-border);
+  background: var(--v-surface-2);
+}
+
+/* 重命名输入框：与工程名同位置、同字号，避免顶栏跳动 */
+.v-topbar__rename {
+  font: inherit;
+  font-weight: 600;
+  width: 180px;
+  height: 20px;
+  padding: 0 4px;
+  border: 0.5px solid var(--v-accent);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+}
+
+/* 参数弹窗：绝对定位，不改变四区尺寸 */
+.v-dialog {
+  position: absolute;
+  top: calc(var(--v-topbar-h) - 2px);
+  left: 8px;
+  z-index: var(--v-z-commandbar);
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: var(--v-bg);
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+}
+
+.v-dialog__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.v-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-dialog__field input {
+  height: 22px;
+  padding: 0 6px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  font-size: 12px;
+}
+
+.v-dialog__detail {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--v-fg);
+}
+
+.v-dialog__detail--dim {
+  color: var(--v-fg-dim);
+}
+
+.v-dialog__error {
+  font-size: 11px;
+  color: var(--v-error);
+}
+
+.v-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.v-dialog__primary {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+/* 导出弹窗：比参数弹窗宽一点，放得下三种格式的说明 */
+.v-dialog--export {
+  width: 300px;
+  gap: 10px;
+}
+
+.v-export__formats {
+  display: grid;
+  gap: 4px;
+}
+
+.v-export__format {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 8px;
+  text-align: left;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.v-export__format strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.v-export__format span {
+  color: var(--v-fg-dim);
+}
+
+.v-export__format--on {
+  border-color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-export__row {
+  display: flex;
+  gap: 8px;
+}
+
+.v-export__row .v-dialog__field {
+  flex: 1;
+}
+
+.v-export__row select {
+  height: 22px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  font-size: 12px;
+}
+
+.v-export__progress {
+  display: grid;
+  gap: 4px;
+}
+
+.v-export__bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--v-border);
+  overflow: hidden;
+}
+
+.v-export__bar span {
+  display: block;
+  height: 100%;
+  background: var(--v-accent);
+  transition: width 120ms linear;
+}
+
+.v-export__stage {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-export__message {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--v-fg);
+  word-break: break-all;
+}
+
+.v-export__message--error {
+  color: var(--v-error);
+}
+
+/* 错误条：覆盖在顶栏下方，不改变布局尺寸 */
+.v-errorbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--v-z-overlay);
+  display: flex;
+  flex-direction: column;
+}
+
+.v-errorbar__item {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-error);
+  background: #fdf0ee;
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-errorbar__close {
+  margin-left: auto;
+  padding: 0 4px;
+  font-size: 11px;
+  color: inherit;
+  background: transparent;
+  border-color: transparent;
+}
+
+/* 屏幕阅读器专用（aria-live 播报区） */
+.v-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.v-assetpanel__count {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-topbar__spacer {
+  flex: 1 1 auto;
+}
+
+.v-topbar__ai {
+  color: var(--v-fg-dim);
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+}
+
+/* 三列：110px / 弹性 / 110px */
+.v-body {
+  display: grid;
+  grid-template-columns: var(--v-rail-w) minmax(0, 1fr) var(--v-rail-w);
+  min-height: 0;
+}
+
+.v-rail {
+  background: var(--v-surface);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.v-rail--left {
+  border-right: 0.5px solid var(--v-border);
+}
+
+.v-rail--right {
+  border-left: 0.5px solid var(--v-border);
+}
+
+.v-assetpanel__empty {
+  width: var(--v-thumb-w);
+  height: var(--v-thumb-h);
+  border: 1px dashed #c8c8c8;
+  border-radius: var(--v-radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  background: var(--v-bg);
+}
+
+.v-assetpanel__plus {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* 中列：预览 16:9 居中 + 控件条 36px */
+.v-stage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) var(--v-ctrlbar-h);
+  min-height: 0;
+  background: var(--v-surface-2);
+}
+
+.v-stage__viewport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 12px;
+}
+
+.v-stage__screen {
+  aspect-ratio: 16 / 9;
+  /* ⚠️ 这里用的是**视口高度**，因此 `<veditor-panel>` 被嵌进一个高度远小于视口的宿主容器时，
+     预览会按整窗高度算宽度、把面板内容撑出容器（实测宿主给 600px 高时，播放按钮被挤到
+     y=841）。试过 `container-type: size` + `100cqh`（容器高度由内容决定 → 查询自己的循环）
+     和 ResizeObserver 写 CSS 变量，都没能解决——真正的阻塞点在 `.v-app` 的
+     `height: 100%` 于 shadow DOM 里失效（计算值 1233px，而非父容器的 600px）。
+     现状：**全屏使用正常**；宿主集成时需给容器足够高度（或自行修正百分比高度链）。 */
+  width: min(100%, calc((100vh - var(--v-topbar-h) - var(--v-ctrlbar-h) - var(--v-timeline-h) - 24px) * 16 / 9));
+  background: #000;
+  border: 0.5px solid var(--v-border);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  overflow: hidden;
+}
+
+/* 预览画布：填满 16:9 容器（内部像素 1280×720 由 CSS 等比缩放） */
+.v-stage__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.v-ctrlbar {
+  height: var(--v-ctrlbar-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-top: 0.5px solid var(--v-border);
+  background: var(--v-surface);
+}
+
+.v-ctrlbar__timecode {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  color: var(--v-fg);
+}
+
+.v-ctrlbar__spacer {
+  flex: 1 1 auto;
+}
+
+/* 右属性栏：纵向单列，标签 11px 灰字 + 控件在下 */
+.v-inspector__group {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v-inspector__label {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-inspector__control {
+  height: 20px;
+  width: 100%;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-2);
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  padding: 0 4px;
+}
+
+.v-inspector__control:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.v-inspector__value {
+  font-size: 10px;
+  color: var(--v-fg-dim);
+  align-self: flex-end;
+}
+
+.v-inspector__pos {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.v-inspector__sep {
+  color: var(--v-fg-dim);
+  font-size: 11px;
+}
+
+/* range 输入（缩放/不透明度滑块）在窄栏里可点 */
+.v-inspector__control[type='range'] {
+  padding: 0;
+  accent-color: var(--v-accent);
+}
+
+/* 底部时间线 220px */
+.v-timeline {
+  position: relative;
+  height: var(--v-timeline-h);
+  display: grid;
+  grid-template-rows: var(--v-tl-toolbar-h) var(--v-tl-ruler-h) minmax(0, 1fr);
+  border-top: 0.5px solid var(--v-border);
+  background: var(--v-bg);
+  min-height: 0;
+}
+
+.v-timeline__splitter {
+  position: absolute;
+  top: calc(var(--v-splitter-h) * -1);
+  left: 0;
+  right: 0;
+  height: var(--v-splitter-h);
+  cursor: row-resize;
+  background: transparent;
+}
+
+/* 时间线画布：跨 ruler + tracks 两行（grid-row 2/4），内部 = 标尺 24 + 轨 × 56 */
+/**
+ * 时间线的滚动容器。
+ *
+ * 为什么必须有：画布高度 = 标尺 + 轨道数 × 56，而时间线区域高度是固定的
+ * （可拖分隔条调整）。4 条轨就要 248px，默认区域只有 220px —— 旧实现让画布直接
+ * 溢出（`overflow: visible`），**下面的轨道被挤出视口**，看不见也拖不进去。
+ * 现在画布放在这个容器里，轨道再多也能滚到；`scrollbar-gutter: stable`
+ * 避免滚动条出现/消失导致画布宽度抖动（横向坐标全靠 canvas.width 换算）。
+ *
+ * 注意：滚轮仍然走横向滚动（时间线惯例，见 `onWheel`），纵向靠滚动条。
+ */
+.v-tl-scroll {
+  grid-row: 2 / 4;
+  grid-column: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.v-tl-inner {
+  position: relative;
+}
+
+.v-tl-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  touch-action: none;
+  cursor: default;
+}
+
+/**
+ * 轨道头（DOM）。
+ *
+ * 规范见 `docs/timeline-spec.md` §2：130px 宽、图标 16 / 名称 12 / 按钮 18、
+ * 按类型分底色、四态（默认/悬停/选中/锁定）。
+ *
+ * **所有颜色都走变量**（`--v-tl-*`）：高对比主题只覆盖变量值，不用改这里任何一行。
+ */
+.v-track-head {
+  position: absolute;
+  left: 0;
+  width: var(--v-tl-head-w);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--v-tl-track-border);
+  border-bottom: 1px solid var(--v-tl-track-border);
+  font-size: 12px;
+  color: var(--v-tl-text);
+  user-select: none;
+  z-index: 2;
+}
+
+/* 按类型分底色：视频浅灰 / 音频浅蓝 / 字幕最浅（一眼分清"这条轨是干什么的"） */
+.v-track-head[data-kind='video'] { background: var(--v-tl-track-video-bg); }
+.v-track-head[data-kind='audio'] { background: var(--v-tl-track-audio-bg); }
+.v-track-head[data-kind='text'] { background: var(--v-tl-track-text-bg); }
+
+.v-track-head:hover { filter: brightness(0.98); }
+
+/* 选中态：左侧 2px 主色条 + 底色加深 */
+.v-track-head[data-selected='true'] {
+  background: var(--v-tl-track-video-bg-active);
+  box-shadow: inset 2px 0 0 var(--v-accent);
+}
+
+/* 锁定态：整块压暗，提示"这里动不了" */
+.v-track-head[data-locked='true'] { opacity: 0.6; }
+
+.v-track-head__icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  opacity: 0.7;
+  color: var(--v-tl-text-dim);
+}
+.v-track-head:hover .v-track-head__icon { opacity: 1; }
+
+.v-track-head__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.v-track-head__name:hover { text-decoration: underline dotted; }
+
+.v-track-head__rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  padding: 0 3px;
+  font-size: 12px;
+  border: 1px solid var(--v-accent);
+  border-radius: var(--v-tl-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+}
+
+.v-track-head__btn {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--v-tl-radius);
+  background: transparent;
+  color: var(--v-tl-text-dim);
+  cursor: pointer;
+}
+.v-track-head__btn:hover { color: var(--v-accent); background: var(--v-accent-weak); }
+/* 生效态（已隐藏 / 已静音 / 已锁定）：主色高亮 */
+.v-track-head__btn[aria-pressed='true'] {
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+.v-track-head__btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.v-track-head__more {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--v-tl-text-dim);
+  cursor: pointer;
+  opacity: 0.8;
+}
+.v-track-head__more:hover { color: var(--v-accent); opacity: 1; }
+
+/**
+ * 高度拖拽热区（轨道头下边缘）。
+ *
+ * 5px 而不是规范写的 3px：1080p 上 3 个物理像素几乎压不住，用户会以为"高度不能调"。
+ * 热区**向下溢出 2px**（`bottom: -2px`），正好压在行分隔线上——
+ * 视觉上那条线就是"可以拉的地方"，而且不侵占上面的按钮区。
+ * hover / 拖动时变主色，是可发现性的关键（否则用户永远不知道这里能拖）。
+ */
+.v-track-head__resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 5px;
+  cursor: ns-resize;
+  z-index: 3;
+}
+
+.v-track-head__resize:hover,
+body.v-track-resizing .v-track-head__resize {
+  background: var(--v-accent);
+}
+
+/* 拖动排序中：全局 grabbing，并禁掉文字选择（否则会选中轨道名） */
+body.v-track-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+body.v-track-dragging .v-track-head {
+  cursor: grabbing;
+}
+
+/**
+ * 顶部离线条。
+ *
+ * 用**琥珀色**而不是红色：红色在这套配色里已经表示"错误/危险操作"（删除），
+ * 而"素材离线"是**可修复的状态**，不是错误。琥珀色既醒目又不制造焦虑。
+ */
+.v-offlinebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  height: 26px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--v-fg);
+  background: var(--v-warn-bg, #fff7e6);
+  border-bottom: 1px solid var(--v-border);
+}
+
+.v-offlinebar__dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--v-tl-offline, #d4380d);
+}
+
+.v-offlinebar__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.v-offlinebar__btn {
+  height: 18px;
+  padding: 0 7px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.v-offlinebar__btn:hover {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+.v-offlinebar__btn--primary {
+  border-color: var(--v-tl-offline, #d4380d);
+  color: var(--v-tl-offline, #d4380d);
+  background: var(--v-bg);
+}
+
+/**
+ * 自动恢复进行中的样子：**灰底、无按钮**。
+ *
+ * 刻意做成"不像警告"：这时候不需要用户做任何事，弹一条带按钮的黄条
+ * 只会让人以为出了问题。恢复结束（`autoRestoreDone`）后才会变成琥珀色的离线条。
+ */
+.v-offlinebar--working {
+  background: var(--v-surface-2);
+  color: var(--v-fg-dim);
+}
+
+.v-offlinebar--working .v-offlinebar__dot {
+  background: var(--v-accent);
+  animation: v-offline-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes v-offline-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* 素材缓存面板：统计行 + 横排开关 */
+.v-dialog__stats {
+  display: flex;
+  gap: 14px;
+  padding: 6px 0 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--v-fg-dim);
+}
+
+.v-dialog__field--row {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.v-dialog__field--row input[type='checkbox'] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}
+
+.v-dialog__actions--wrap {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.v-dialog__danger {
+  border-color: var(--v-tl-offline, #d4380d) !important;
+  color: var(--v-tl-offline, #d4380d) !important;
+}
+
+.v-dialog__hint {
+  margin: 4px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--v-fg-dim);
+}
+
+/* 预览区的「素材已离线」提示：压在画面中央偏下，不挡画面主体 */
+.v-stage__offline {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #ffffff;
+  background: rgba(20, 20, 20, 0.78);
+  border-radius: var(--v-radius);
+  pointer-events: auto;
+  z-index: 3;
+}
+
+.v-stage__offline-btn {
+  height: 18px;
+  padding: 0 7px;
+  font-size: 10px;
+  border: 0.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--v-radius);
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.v-stage__offline-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* 素材卡的「离线」角标（左上角，与时间线同色） */
+.v-assetcard__badge--offline {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 12px;
+  color: #ffffff;
+  background: var(--v-tl-offline, #d4380d);
+  border-radius: 2px;
+}
+
+/* 轨道下方的通栏「＋ 添加轨道」 */
+.v-tl-add-track-row {
+  position: absolute;
+  left: 0;
+  width: var(--v-tl-head-w);
+  height: 24px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  border: 0;
+  border-right: 1px solid var(--v-tl-track-border);
+  border-bottom: 1px solid var(--v-tl-track-border);
+  background: var(--v-surface);
+  cursor: pointer;
+  z-index: 2;
+}
+.v-tl-add-track-row:hover { color: var(--v-accent); background: var(--v-accent-weak); }
+
+.v-timeline__splitter:hover {
+  background: var(--v-accent-weak);
+}
+
+.v-tl-toolbar {
+  height: var(--v-tl-toolbar-h);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border-bottom: 0.5px solid var(--v-border);
+  background: var(--v-surface);
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-tl-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.v-tl-ruler {
+  height: var(--v-tl-ruler-h);
+  display: flex;
+  align-items: center;
+  padding-left: var(--v-track-head-w);
+  border-bottom: 0.5px solid var(--v-border);
+  background: var(--v-surface);
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-tl-tracks {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.v-tl-track {
+  height: var(--v-track-h);
+  display: grid;
+  grid-template-columns: var(--v-track-head-w) minmax(0, 1fr);
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-tl-track__head {
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: var(--v-surface);
+  border-right: 0.5px solid var(--v-border);
+}
+
+.v-tl-track__lane {
+  background: var(--v-track);
+}
+
+.v-tl-track--audio .v-tl-track__lane {
+  background: #f4f6f5;
+}
+
+.v-tl-empty {
+  position: absolute;
+  inset: 0;
+  padding-left: var(--v-track-head-w);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--v-fg-dim);
+  pointer-events: none;
+}
+
+/* 阻断页（非安全上下文） */
+.v-block {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.v-block__title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.v-block__detail {
+  font-size: 12px;
+  color: var(--v-fg-dim);
+  max-width: 460px;
+}
+
+.v-block code {
+  background: var(--v-surface-2);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+/* 常驻警告条（内存模式 / 素材离线），高 24px */
+.v-warnbar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-warn);
+  background: var(--v-warn-bg);
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-warnbar__action {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--v-accent);
+  background: transparent;
+  border-color: transparent;
+  padding: 0 4px;
+}
+
+/* ---------- 素材栏（T12） ---------- */
+
+.v-assetpanel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+.v-assetcard {
+  position: relative;
+  width: var(--v-thumb-w);
+  height: var(--v-thumb-h);
+  flex: 0 0 auto;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  overflow: hidden;
+  background: var(--v-surface-2);
+  /* 可拖：光标要告诉用户"这张卡能抓起来"（剪映也是这样） */
+  cursor: grab;
+}
+
+.v-assetcard:active {
+  cursor: grabbing;
+}
+
+.v-assetcard[data-status='offline'] {
+  opacity: 0.6;
+}
+
+.v-assetcard__thumb {
+  display: block;
+  width: var(--v-thumb-w);
+  height: var(--v-thumb-h);
+  object-fit: cover;
+}
+
+.v-assetcard__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--v-fg-dim);
+  font-size: 14px;
+}
+
+.v-assetcard__badge {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--v-fg-dim);
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 2px;
+}
+
+.v-assetcard__relink {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  height: 16px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--v-accent);
+  background: rgba(255, 255, 255, 0.92);
+  border: 0.5px solid var(--v-accent);
+}
+
+.v-assetpanel__add {
+  flex: 0 0 auto;
+  width: var(--v-thumb-w);
+  height: 20px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--v-fg-dim);
+}
+
+/* 全窗口拖放高亮：覆盖整个应用区域，不拦截事件 */
+.v-dropzone {
+  position: fixed;
+  inset: 0;
+  z-index: var(--v-z-commandbar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  border: 2px solid var(--v-accent);
+  background: rgba(83, 74, 183, 0.06);
+}
+
+.v-dropzone__label {
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--v-accent);
+  background: var(--v-bg);
+  border: 0.5px solid var(--v-accent);
+  border-radius: var(--v-radius);
+}
+
+/* 无 FS Access 的常驻警告条（R-004） */
+.v-memorybar {
+  flex: 0 0 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-warn);
+  background: var(--v-warn-bg);
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-errorbar__detail {
+  margin-left: 6px;
+  color: var(--v-fg-dim);
+}
+
+/* ================= AI 命令栏（M4） ================= */
+
+/* 覆盖式浮层：绝对定位，不改任何区块尺寸（P1）。默认不存在于 DOM。 */
+.v-cmdbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--v-timeline-h);
+  z-index: var(--v-z-commandbar);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--v-bg);
+  border-top: 0.5px solid var(--v-border);
+  box-shadow: 0 -6px 18px rgb(0 0 0 / 8%);
+}
+
+.v-cmdbar__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.v-cmdbar__spark {
+  color: var(--v-accent);
+  font-size: 13px;
+}
+
+.v-cmdbar__input {
+  flex: 1;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+}
+
+.v-cmdbar__input:focus {
+  outline: 2px solid var(--v-accent-weak);
+  border-color: var(--v-accent);
+}
+
+.v-cmdbar__run,
+.v-cmdbar__close {
+  height: 26px;
+  padding: 0 10px;
+  font-size: 11px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+.v-cmdbar__run {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+.v-cmdbar__run:disabled {
+  border-color: var(--v-border);
+  color: var(--v-fg-dim);
+  cursor: default;
+}
+
+.v-cmdbar__privacy {
+  font-size: 10px;
+  color: var(--v-fg-dim);
+}
+
+.v-cmdbar__result {
+  max-height: 240px;
+  overflow: auto;
+  padding: 6px 8px;
+  border-radius: var(--v-radius);
+  background: var(--v-surface);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--v-fg);
+}
+
+.v-cmdbar__result--error {
+  background: #fdecea;
+  color: var(--v-error);
+}
+
+.v-cmdbar__message {
+  margin: 0 0 6px;
+}
+
+.v-cmdbar__accept {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  border: 0.5px solid var(--v-accent);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-accent);
+  cursor: pointer;
+}
+
+/* ================= 一次性提示（可撤销 toast） ================= */
+
+.v-toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--v-timeline-h) + 12px);
+  transform: translateX(-50%);
+  z-index: var(--v-z-commandbar);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border: 0.5px solid var(--v-border);
+  border-radius: 999px;
+  background: var(--v-bg);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  font-size: 11px;
+  color: var(--v-fg);
+}
+
+.v-toast__undo {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--v-accent);
+  cursor: pointer;
+}
+
+/* 属性栏新增分组（文字 / 调色 / 声音）：110px 宽放不下就纵向滚动，不折叠（P2 两层封顶） */
+.v-rail--right {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.v-inspector__group--section {
+  margin-top: 10px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--v-border);
+}
+
+.v-inspector__section {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--v-fg-dim);
+  letter-spacing: 0.04em;
+}
+
+.v-inspector__textarea {
+  height: auto;
+  min-height: 34px;
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+}
+
+.v-inspector__control[type='color'] {
+  height: 22px;
+  padding: 0 2px;
+}
+
+/* 吸附开关：状态必须看得见（开/关都用文字，不用图标） */
+.v-tl-snap {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: transparent;
+  color: var(--v-fg-dim);
+  cursor: pointer;
+}
+
+.v-tl-snap--on {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-tl-add-text {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+/* 导出：区间导出勾选 */
+.v-export__range {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--v-fg);
+}
+
+.v-export__range input {
+  margin-top: 2px;
+}
+
+.v-export__range input:disabled + span {
+  color: var(--v-fg-dim);
+}
+
+/* 关键帧按钮（属性栏）：◆ 实心 = 当前帧已打点 */
+.v-inspector__group--tight {
+  gap: 0;
+}
+
+.v-inspector__kf {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  height: 20px;
+  padding: 0 4px;
+  font-size: 10px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg-dim);
+  cursor: pointer;
+}
+
+.v-inspector__kf--on {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-inspector__kf:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.v-inspector__kf-count {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--v-fg-dim);
+}
+
+/* 代理媒体角标（R-052）：与"内存"角标同位置，靠颜色区分 */
+.v-assetcard__badge--proxy {
+  background: var(--v-accent-weak);
+  color: var(--v-accent);
+}
+
+/* 顶栏"工程"下拉（R-054）：绝对定位，不改变顶栏高度 */
+.v-topbar__menu {
+  position: relative;
+}
+
+.v-topbar__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: var(--v-z-commandbar);
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+  padding: 4px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 12%);
+}
+
+.v-topbar__dropdown button {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+.v-topbar__dropdown button:hover {
+  background: var(--v-surface);
+}
+
+/* 预设列表（R-053）：名字按钮 + 删除 × */
+.v-inspector__preset-del {
+  width: 18px;
+  height: 20px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg-dim);
+  cursor: pointer;
+}
+
+.v-inspector__preset-del:hover {
+  color: var(--v-error);
+  border-color: var(--v-error);
+}
+
+.v-inspector__hint {
+  font-size: 10px;
+  color: var(--v-fg-dim);
+}
+
+/* ================= 触屏 / 平板（R-063） ================= */
+
+/*
+ * PRD 要求：≥768px 宽度下**全部 P0 操作可完成**。
+ * 做法是"收窄 + 放大可点区域"，不隐藏任何 P0 控件——隐藏控件是最容易过测试、
+ * 却最坑用户的做法（找不到按钮 = 功能不存在）。
+ */
+@media (max-width: 1024px) {
+  :root {
+    --v-rail-w: 96px;
+    /* 时间线高度**不缩**：canvas 高度 = 标尺 24 + 轨道数 × 56（3 轨 = 192），
+       轨道高是 JS 命中测试的常量，改 CSS 变量会让点击落到错误的轨道上。
+       窄屏该省的是宽度，不是高度。 */
+    --v-thumb-w: 72px;
+    --v-thumb-h: 41px;
+  }
+
+  /* 触屏最小可点 26px（手指约 7mm） */
+  .v-topbar button,
+  .v-tl-toolbar button,
+  .v-dialog__actions button,
+  .v-inspector__control {
+    min-height: 26px;
+  }
+
+  .v-inspector__control[type='range'] {
+    height: 22px;
+  }
+
+  /* 属性栏变窄后文字标签折行，不再挤压控件 */
+  .v-inspector__label {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 820px) {
+  :root {
+    --v-rail-w: 88px;
+  }
+}
+
+/* ================= 高对比主题（R-064） ================= */
+
+/*
+ * 只覆盖颜色令牌，不改任何尺寸——高对比不该改变布局，
+ * 否则用户切换后要重新找按钮位置。
+ */
+:root[data-theme='contrast'] {
+  --v-bg: #000000;
+  --v-surface: #111111;
+  --v-surface-2: #1b1b1b;
+  --v-border: #8a8a8a;
+  --v-fg: #ffffff;
+  --v-fg-dim: #d8d8d8;
+  --v-accent: #ffd400;
+  --v-accent-weak: #3a2f00;
+  --v-clip: #4b4b86;
+  --v-track: #0d0d0d;
+  --v-warn: #ffd400;
+  --v-warn-bg: #2a2200;
+  --v-error: #ff7a6b;
+  /* 时间线：黑底上要能分清三种轨道 */
+  --v-tl-track-video-bg: #101010;
+  --v-tl-track-video-bg-active: #1e1e1e;
+  --v-tl-track-audio-bg: #0d1620;
+  --v-tl-track-text-bg: #141414;
+  --v-tl-track-border: #5a5a5a;
+  --v-tl-text: #ffffff;
+  --v-tl-text-dim: #c8c8c8;
+  /* 高对比主题下用更亮的红：深红在 #101010 上几乎看不见 */
+  --v-tl-offline: #ff6b3d;
+}
+
+/* 顶栏主题按钮（R-064）：与其它图标按钮同尺寸 */
+.v-topbar__theme {
+  width: 24px;
+  padding: 0;
+  font-size: 12px;
+}
+
+/**
+ * 旋转/翻转（画面）：按钮组。用文字而不是图标——每个软件的翻转图标都不一样。
+ *
+ * **必须单列全宽**：右属性栏只有 110px，"左转 90° + 水平翻转"排两列时
+ * 每列只有 53px，min-content 撑不住 → 按钮溢出被 `overflow:auto` 裁掉一半，
+ * 表现为"按钮看得见、点不到"（E2E 的 elementFromPoint 直接命中属性栏本身）。
+ */
+.v-inspector__buttons {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  width: 100%;
+}
+
+.v-inspector__btn {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 10px;
+  white-space: nowrap;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+.v-inspector__btn:hover:not(:disabled) {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+.v-inspector__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.v-inspector__btn--on {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-inspector__btn--wide {
+  grid-column: 1 / -1;
+}
+
+/* 降噪开关（R-061） */
+.v-inspector__check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+/* 应用内自检面板（顶栏「自检」）：给人一个"在这台机器上到底能不能用"的入口 */
+.v-selfcheck {
+  position: fixed;
+  right: 16px;
+  top: 56px;
+  z-index: 40;
+  width: 460px;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--v-border);
+  border-radius: 8px;
+  background: var(--v-surface);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+}
+
+.v-selfcheck__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.v-selfcheck__head button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--v-fg-dim);
+}
+
+.v-selfcheck__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.v-selfcheck__list li {
+  display: grid;
+  grid-template-columns: 18px 150px 1fr;
+  gap: 6px;
+  align-items: baseline;
+  line-height: 1.5;
+}
+
+.v-selfcheck__bad .v-selfcheck__name {
+  color: #d64545;
+}
+
+.v-selfcheck__detail {
+  color: var(--v-fg-dim);
+  word-break: break-all;
+}
+
+.v-selfcheck__foot {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.v-selfcheck__foot button {
+  padding: 3px 10px;
+  border: 1px solid var(--v-border);
+  border-radius: 4px;
+  background: var(--v-bg);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/* 右键菜单（片段 / 素材）：内嵌面板里原生菜单不可靠，自己画一个 */
+.v-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--v-border);
+  border-radius: 6px;
+  background: var(--v-surface);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.v-menu__sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--v-border);
+}
+
+.v-menu__item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+.v-menu__item:hover {
+  background: var(--v-bg);
+}
+
+.v-menu__item--danger {
+  color: #d64545;
+}
+
+/* 顶栏构建时间戳（区分"代码没生效"和"页面没刷新"） */
+.v-topbar__stamp {
+  font-size: 10px;
+  color: var(--v-fg-dim);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+  user-select: text;
+}
+
+/* 控件条里的预览音量（只听，不影响导出） */
+.v-ctrlbar__volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-ctrlbar__volume input[type='range'] {
+  width: 96px;
+}
+
+.v-ctrlbar__volume-value {
+  /* dB 为主显示：留够 "+12.0 dB" 的宽度，等宽数字避免拖动时抖动 */
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.v-ctrlbar__volume-pct {
+  min-width: 34px;
+  color: var(--v-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.v-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
