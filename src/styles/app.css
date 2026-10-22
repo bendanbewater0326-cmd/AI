@@ -1077,6 +1077,156 @@ body.v-splitter-dragging--y {
   border-color: var(--v-accent);
 }
 
+/* ---------- 转场面板 ---------- */
+
+.v-transitionpanel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.v-transitionpanel__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.v-transitionpanel__label {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-transitionpanel__durations {
+  display: flex;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+
+.v-transitionpanel__duration {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: transparent;
+  border: 0.5px solid var(--v-border);
+  border-radius: 11px;
+}
+
+.v-transitionpanel__duration[data-active='true'] {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-transitionpanel__remove {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.v-transitionpanel__remove:disabled {
+  color: var(--v-fg-dim);
+}
+
+.v-transitionpanel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  align-content: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.v-trscard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/*
+ * 缩略图舞台。两种画法都**不用渐变**（项目硬约束：无阴影、无渐变）：
+ * - 叠化：两块半透明方块叠着；
+ * - 淡入/淡出：5 条竖条的不透明度递变（用台阶表达"渐渐"）。
+ */
+.v-trscard__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 6px;
+  overflow: hidden;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: #111111;
+}
+
+.v-trscard:hover .v-trscard__stage,
+.v-trscard[data-active='true'] .v-trscard__stage {
+  border-color: var(--v-accent);
+}
+
+.v-trscard__block {
+  position: absolute;
+  width: 46%;
+  height: 58%;
+  border-radius: 2px;
+}
+
+.v-trscard__block--a {
+  left: 12%;
+  background: #8fa8ff;
+  opacity: 0.6;
+}
+
+.v-trscard__block--b {
+  right: 12%;
+  background: #ffffff;
+  opacity: 0.6;
+}
+
+.v-trscard__bar {
+  flex: 1 1 auto;
+  height: 56%;
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+.v-trscard__name {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v-trscard[data-active='true'] .v-trscard__name {
+  color: var(--v-accent);
+}
+
+.v-transitionpanel__hint {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--v-fg-dim);
+}
+
 .v-assetpanel__empty {
   width: var(--v-thumb-w);
   height: var(--v-thumb-h);

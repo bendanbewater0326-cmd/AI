@@ -49,13 +49,13 @@
 | 任务进度 | **T01–T19 全部完成** | 架构 §任务表 |
 | 里程碑 | M1 能跑 / M2 能剪 / M3 导出 / M4 AI / **M5-M6（P2）13/13 全部交付** | — |
 | 批次增强 | A（音频·导出·UI）/ B（M4 AI）/ C1（文字·调色·音量）/ C2（转场·入出点）/ C3（变速·关键帧·剪贴板）全部交付 | — |
-| 源码 | **85 个 ts/tsx**（+ `app.css` = 86 文件 / 34971 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
-| 单测 | **594 条 / 36 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
-| E2E | **59 个 `verify-*.mjs`**（58 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建产物 | `dist/main.js` **654.9KB**（esbuild 单包） | `npm run build` |
-| 时基静态检查 | **扫描 86 个文件，0 处非法换算** | `npm run check` |
+| 源码 | **88 个 ts/tsx**（+ `app.css` = 89 文件 / 35535 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
+| 单测 | **608 条 / 37 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
+| E2E | **60 个 `verify-*.mjs`**（59 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建产物 | `dist/main.js` **660.1KB**（esbuild 单包） | `npm run build` |
+| 时基静态检查 | **扫描 89 个文件，0 处非法换算** | `npm run check` |
 
-> 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存 / 18 文字模板。
+> 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存 / 18 文字模板 / 14 转场落点。
 > 文件数把上面管道的 `xargs wc -l | tail -1` 换成 `wc -l` 即可。
 > 以上是 2026-10-21 复核的实测值；**新增测试时请连同分项与总数一起改**。
 
@@ -2102,6 +2102,46 @@ S1.0 的钩子、S1.1 的顶栏都只是"不挡路"。这一轮才是真正把�
 
 ---
 
+### 3.34 2026-10-23 · 左栏「转场」面板第一步：3 种转场 + 时长档位 + 点击应用
+
+**先做的摸底结论（`docs/transition-panel-plan.md`）**
+
+转场链路完整（预览与导出共用 `renderFrame`），但**只有 3 种类型、且只有"不透明度"一个自由度**：
+`TransitionOverride` 只有 `opacity` + `frozenFrame`。滑入/擦除/缩放要扩渲染模型，不在本轮。
+另外两个坑也记一下：
+
+- `transitionOut` **只处理 `fadeOut`**，`transitionOut.crossDissolve` 会被**静默忽略**；
+  属性栏把叠化永远写成 in 侧，所以只有手改工程文件才会踩到；
+- **没有音频交叉淡化**，声音在接缝处硬切（本轮不做，属于音频链路改动）。
+
+**产出**
+
+- `core/transitionPresets.ts`：3 个预设（叠化/淡入/淡出）+ 时长档位 0.3/0.5/1.0。
+  **`side` 写在数据里**（叠化/淡入 → in，淡出 → out），不在 UI 里写 if ——
+  以后补类型只加一条数据，面板与拖拽两条链路都不用改。
+- `core/transitionTarget.ts`：4 个纯函数（`clipAtFrame` / `previousAdjacent` /
+  `resolveTransitionTarget` / `buildTransitionOps`）+ `resolveDuration`。
+  三条规则收敛到这里：**半开区间命中**、**左邻严格相等**、**两侧互斥**。
+  右侧属性栏的时长夹取与 ops 构造也改成调它们（原来各写一份）。
+- `ui/TransitionPanel.tsx`：时长三档 + 3 张卡片 + 「移除」。
+  缩略图纯 DOM 画（叠化=两块半透明方块；淡入/淡出=5 条不透明度递变的竖条），
+  **不用渐变**（项目硬约束）。
+- 落点：选中片段优先；没选中就用**播放头所在的片段**；都没有给可读提示。
+- 叠化缺左邻 → 提示「叠化需要左侧紧挨着一段素材（中间不能有空隙）」，**文档不变**。
+
+**顺手统一的一处**
+
+属性栏原来自己算 `Math.min(secondsToFrames(秒), maxTransitionFrames(clip))` 并手写
+"先清两侧再设一侧"的 op 列表；现在两处都调 `resolveDuration` / `buildTransitionOps`。
+顺带获得一个改进：设成和当前完全一样的转场时返回空数组，**不再产生一条无用的撤销步**。
+
+**验证**：`transition-target.test.mjs` 14 项（半开区间/严格相等/两侧互斥/夹取）、
+`verify-transition-panel.mjs` 14 项（含 **⑨ 读画面像素**：淡入让第 0 帧 63.6 暗于第 40 帧 127.7）。
+
+**数字**：单测 608 / 37 脚本、E2E 60 个、构建 660.1KB（+5.2KB）。
+
+---
+
 ## 4. 技术栈
 
 | 层 | 技术 |
@@ -2138,7 +2178,8 @@ src/
               (探测→资产→注册预览源→缩略图，两条导入入口共用), silence, proxy, denoise
   render/     compositor(WebGL2+2D降级), timelinePainter, textLayer,
               curve, lut, mask, frameTransform(旋转/翻转的纯函数)
-  ui/         App, TopBar, LeftPanel(左栏 44px 图标条 + 9 Tab), AssetPanel(素材 Tab 内容),
+  ui/         App, TopBar, LeftPanel(左栏 44px 图标条 + 9 Tab), AssetPanel(素材 Tab),
+              TextPanel(文本 Tab), TransitionPanel(转场 Tab),
               TimelineView, InspectorPanel, CommandBar, ExportDialog, Toast,
               ContextMenu(自绘右键菜单), SelfCheck(应用内自检), timelineController,
               theme, splitter(左/右/时间线 三面板共用：轴 + clamp + 记忆), CacheDialog(缓存池管理)
@@ -2183,7 +2224,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 > 有 33 个 E2E 配了 npm 别名：`e2e:ui`（a-ui）/ `e2e:export`（m3）/ `e2e:ai`（m4）/ `e2e:c1`（c-ui）/ `e2e:c2`（c2-ui）/ `e2e:host`（postmessage）/ `e2e:png`（png-export）/ `e2e:roughcut`（roughcut）/ `e2e:proxy`（proxy）/ `e2e:project`（project-file）/ `e2e:preset`（preset）/ `e2e:touch`（touch-a11y）/ `e2e:denoise`（denoise）/ `e2e:curve`（curve）/ `e2e:lut`（lut）/ `e2e:mask`（mask）/ `e2e:multicam`（multicam）/ `e2e:transcribe`（transcribe）/ `e2e:layout`（layout）/ `e2e:left-tabs`（left-tabs）。
 > 其余直接用 `node tests/verify-xxx.mjs`。
 
-### 单测脚本（`tests/*.test.mjs`，36 个 / 594 条）
+### 单测脚本（`tests/*.test.mjs`，37 个 / 608 条）
 
 | 脚本 | 覆盖 | 条数 |
 |---|---|---|
@@ -2223,9 +2264,10 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `auto-restore` | 自动恢复四层（缓存→宿主→句柄→目录扫描） | 12 |
 | `draft-cache` | 草稿缓存池（指纹去重 / 并发 2 / 清理未使用） | 11 |
 | `text-presets` | 文字模板库（10 个模板 / 分类 / 内容覆盖语义 / 分辨率换算） | 18 |
-| **合计** | | **594** |
+| `transition-target` | 转场落点（半开区间命中 / 左邻严格相等 / 两侧互斥 / 时长夹取） | 14 |
+| **合计** | | **608** |
 
-### E2E 脚本（`tests/verify-*.mjs`，59 个）
+### E2E 脚本（`tests/verify-*.mjs`，60 个）
 
 | 脚本 | 覆盖 |
 |---|---|
@@ -2265,6 +2307,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `left-tabs` | **S1.3 左栏**：44px 图标条**算在 25% 之内**（内容区 = 左栏 − 44）、9 个中文 Tab 顺序与 title、未实现 Tab 可点且给「功能开发中」、切走再回来素材不丢、刷新记住 Tab、折叠后图标条一起归零、820px 同步收窄 |
 | `timeline-height` | **S1.4 时间线高度**：默认占**工作区**（视口 − 顶栏）50%、4px 热区正好压在预览/时间线边界且 `elementFromPoint` 命中自身、拖拽 clamp 15%/70%、刷新记忆、没拖过时**不写行内变量**、拖完片段数与 16:9 预览不变 |
 | `ctrlbar` | **S1.5 控制栏叠画面**：完全落在 16:9 画面内且水平居中、距底 12px、舞台只剩一行（真的不占布局高度）、悬停变实/移出变淡、五个控件齐全、播放键**用真实鼠标点击**（证明没被 canvas 盖住）、逐帧按钮真的改播放头、820px 不溢出 |
+| `transition-panel` | **左栏转场面板**：3 个预设（叠化/淡入/淡出）、时长三档、三种转场各落不同侧、两侧互斥、叠化缺左邻给可读提示且文档不变、1.0s 在短片段上被夹到一半、移除两侧清空、没选中时按播放头落点、**淡入读画面像素**证明真的在画 |
 | `text-panel` | **左栏文本面板**：10 个模板顺序/中文名、5 个分类筛选、点击新建落**文字轨**且自动选中、一次撤销连轨一起回退、套样式**保留用户文案**、选中视频片段时新建而不改视频、**拖拽**（ghost 落在文字轨 / 第 120 帧吸附 / 轨道头不接）、**我的预设**（存/用/删/持久化/系统预设无删除按钮/属性栏同步）、缩略图与落片样式同源、**描边/粗体读画面像素**、切 Tab 保分类、15% 窄栏不溢出 |
 | `audio-controls` | 音量滑块立即生效（不用等松手）+ 轨道闸门真的到了音频链路 |
 | `audio-menu` | 右键音频菜单 7 项，导出产物用 `Browser.setDownloadBehavior` 落盘校验文件头 |
@@ -2905,6 +2948,7 @@ D:/项目专用文件夹/剪辑工具/
 | **2026-10-23（UI 重构 S1.5）** | 控制栏叠到画面底部居中（**重构线收官**） | `.v-stage` 改单行、控制栏移进 16:9 画面盒绝对定位；半透明黑 + 模糊 + 8px 圆角，默认 0.55 悬停变实；预览 595×335 → 626×352；顺带修「素材已离线」提示缺定位上下文；补上一帧/下一帧（复用 `transport.seekTo`）；13 项 E2E（`verify-ctrlbar-overlay`） |
 | **2026-10-23（文本面板第一批）** | 左栏「文本」模板库 + 点击应用 | `TextContent` 加 `bold?`/`stroke?`（4 处归一化，漏一处就"存盘丢样式"）；10 个模板 / 5 个分类；**模板坐标按工程分辨率换算**（720p 下 `y=380` 会把字幕推出画面，实测像素全黑）；文字改落**文字轨**（建轨+落片一个撤销步）；属性栏补加粗/描边；18 单测 + 22 项 E2E |
 | **2026-10-23（文本面板第二步）** | 拖拽应用 + 落轨全链路统一 | 模板卡拖到时间线（独立 MIME，ghost 落在文字轨、落点吸附）；`addText` / SRT 导入 / AI 转写全部改走 `ensureTextTrackOps`（`buildSubtitleReplaceOps` 不再返回 null）；**修掉真 bug：文字轨与 V1 的 `order` 撞号 → 文字被视频盖住**（新增 `trackCompositeOrder`，合成顺序 ≠ 屏幕顺序）；26 项 E2E |
+| **2026-10-23（转场面板第一步）** | 3 种转场 + 时长档位 + 点击应用 | 摸底确认只有 3 种且只有 opacity 自由度；`transitionPresets`（side 写进数据）+ `transitionTarget`（半开区间 / 左邻严格相等 / 两侧互斥 / 时长夹取，属性栏也改调它）；叠化缺左邻给提示不改文档；缩略图纯 DOM 无渐变；14 单测 + 14 项 E2E |
 | **2026-10-23（文本面板第三步）** | 「我的预设」（**文本面板收官**） | 复用 R-053：`capturePreset`/`buildPresetOps`/settings 存储，只做筛选展示；我的预设（主色描边 + 可删）与系统预设（灰边 + 无删除按钮）明确区分；存预设默认名取当前文案；`PRESETS_CHANGED` 广播修掉"左栏存了右栏看不到"；33 项 E2E |
 
 **当前**：**P0 + P1 + P2 共 64 条全部落地**（4 条为"部分交付"，口径见 §7.1）；postMessage 命令通道已实现（§7.2）。
@@ -2912,8 +2956,8 @@ D:/项目专用文件夹/剪辑工具/
 S1.0–S1.5 已全部完成**：布局钩子 / 顶栏 48 / 三栏 25-50-25 / 左栏 9 图标 Tab /
 时间线 50% / 控制栏叠画面。
 当前在做**左栏功能面板**（第一批：文本 → 转场 → 特效）：
-**文本面板第一步（模板库 + 点击应用）已交付**（§3.31），第二步（拖拽 + SRT 落轨统一）
-与第三步（我的预设）待做。方案见 `docs/text-panel-plan.md`。
+**文本面板三步全部完成**（§3.31–3.33）；**转场面板第一步（3 种转场 + 时长 + 点击）已交付**（§3.34），
+第二步（拖拽 + 接缝吸附 + 落点预览）待做。方案见 `docs/text-panel-plan.md` / `docs/transition-panel-plan.md`。
 
 ---
 

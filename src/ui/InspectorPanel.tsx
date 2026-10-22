@@ -13,7 +13,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import type { BlendMode, Clip, ClipOperation, Effect, TextContent, Transition } from '../core/types';
-import { createId, maxTransitionFrames, normalizeRotation } from '../core/types';
+import { createId, normalizeRotation } from '../core/types';
 import { framesPerSecond, secondsToFrames } from '../core/timebase';
 import {
   VOLUME_MAX_POSITION,
@@ -27,6 +27,7 @@ import {
 import type { ColorGrade } from '../render/compositor';
 import { store, useDoc, useFrame, useSelection } from '../core/store';
 import { buildPresetOps, capturePreset, createPreset, MAX_PRESET_NAME } from '../core/preset';
+import { buildTransitionOps, resolveDuration } from '../core/transitionTarget';
 import type { Preset } from '../core/preset';
 import { PRESETS_CHANGED, addPreset, loadPresets, removePreset } from '../persist/presets';
 import { DEFAULT_DENOISE, denoiseOf } from '../media/denoise';
@@ -291,23 +292,13 @@ export function InspectorPanel(): ReactElement {
     if (clip === null) return;
     const fps = store.getDoc().fpsMilli;
     const seconds = Math.max(0.1, Math.min(2, Number(secondsText ?? transitionSeconds) || 0.5));
-    // 上限还要看**这个片段有多长**：转场窗口以接缝为中心，超过一半就会吃掉整段画面
-    // （进出都有转场时中间永远到不了不透明）。UI 在这里夹，用户不会拖出坏数据。
-    const durationFrames = Math.min(secondsToFrames(seconds, fps), maxTransitionFrames(clip));
-    const next: Transition | null =
-      type === 'none' ? null : { type, durationFrames };
+    // 时长夹取与"两侧互斥"都收敛在 `core/transitionTarget`：
+    // 左栏转场面板调的是同一份，两处各夹一次必然边界不一致（上限是片段时长的一半）
+    const durationFrames = resolveDuration(seconds, clip, fps);
+    const next: Transition | null = type === 'none' ? null : { type, durationFrames };
     const side: 'in' | 'out' = type === 'fadeOut' ? 'out' : 'in';
-    const ops: ClipOperation[] = [];
-    // 先清掉两侧，再按需设置（撤销时这两步合成一步，行为可预期）
-    if (clip.transitionIn !== null) {
-      ops.push({ op: 'setClipTransition', clipId: clip.id, side: 'in', from: clip.transitionIn, to: null });
-    }
-    if (clip.transitionOut !== null) {
-      ops.push({ op: 'setClipTransition', clipId: clip.id, side: 'out', from: clip.transitionOut, to: null });
-    }
-    if (next !== null) {
-      ops.push({ op: 'setClipTransition', clipId: clip.id, side, from: null, to: next });
-    }
+    const ops = buildTransitionOps(clip, side, next);
+    // 空数组 = 已经是这个转场了（同类型同时长、另一侧也为空），不发无用撤销步
     if (ops.length > 0) store.dispatch(ops, '设置转场');
   }
 
