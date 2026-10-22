@@ -134,14 +134,22 @@ function findClip(doc: Project, clipId: string | null): Clip | null {
   return null;
 }
 
-/** 删除当前选中片段（R-017：原位留空，播放头不动）。 */
+/**
+ * 删除**选中的全部片段**（R-017：原位留空，播放头不动）。
+ *
+ * 多选时合并成**一个撤销步** —— 用户按 Ctrl+Z 的期待是"把我刚删的那批找回来"，
+ * 而不是"一次回来一个"。
+ */
 export function removeSelectedClip(store: ProjectStore = defaultStore): boolean {
   const doc = store.getDoc();
-  const clip = findClip(doc, store.getSelectedClipId());
-  if (!clip) return false;
+  const clips = store
+    .getSelection()
+    .map((clipId) => findClip(doc, clipId))
+    .filter((clip): clip is Clip => clip !== null);
+  if (clips.length === 0) return false;
   store.dispatch(
-    [{ op: 'removeClip', clipId: clip.id, removed: clip }],
-    '删除片段',
+    clips.map((clip) => ({ op: 'removeClip' as const, clipId: clip.id, removed: clip })),
+    clips.length === 1 ? '删除片段' : `删除 ${clips.length} 个片段`,
   );
   store.setSelectedClipId(null);
   return true;
@@ -151,17 +159,41 @@ export function removeSelectedClip(store: ProjectStore = defaultStore): boolean 
  * 波纹删除（Shift+Delete，R-018）：删除选中片段，同轨后续片段左移被删片段的时长，
  * **其他轨片段不动**。removeClip + rippleShift 两条 op 合并为 1 个撤销步。
  */
+/**
+ * 波纹删除（Shift+Delete，R-018）：删除选中片段，**同轨**后续片段左移被删时长，
+ * 其他轨不动。多选时整批合成一个撤销步。
+ *
+ * 多选的位移量算法：对每个幸存片段，左移"**它前面所有被删片段的时长之和**"。
+ * 这比"只移最后一个被删片段之后"更准确 —— 被删片段之间如果有间隔，
+ * 那些间隔是用户故意留的，不该被吞掉（PR/剪映的波纹删除也是这个语义）。
+ */
 export function rippleDeleteSelectedClip(store: ProjectStore = defaultStore): boolean {
   const doc = store.getDoc();
-  const clip = findClip(doc, store.getSelectedClipId());
-  if (!clip) return false;
-  const track = doc.tracks.find((item) => item.id === clip.trackId);
-  const shifts = (track?.clips ?? [])
-    .filter((item) => item.id !== clip.id && item.startFrame > clip.startFrame)
-    .map((item) => ({ clipId: item.id, from: item.startFrame, to: item.startFrame - clip.durationFrames }));
-  const ops: ClipOperation[] = [{ op: 'removeClip', clipId: clip.id, removed: clip }];
-  if (shifts.length > 0) ops.push({ op: 'rippleShift', shifts });
-  store.dispatch(ops, '波纹删除');
+  const ids = new Set(store.getSelection());
+  if (ids.size === 0) return false;
+  const doomedTotal = doc.tracks.reduce(
+    (sum, track) => sum + track.clips.filter((clip) => ids.has(clip.id)).length,
+    0,
+  );
+  if (doomedTotal === 0) return false;
+
+  const ops: ClipOperation[] = [];
+  for (const track of doc.tracks) {
+    const doomed = track.clips.filter((clip) => ids.has(clip.id));
+    if (doomed.length === 0) continue;
+    const survivors = track.clips.filter((clip) => !ids.has(clip.id));
+    const shifts: Array<{ clipId: string; from: number; to: number }> = [];
+    for (const clip of survivors) {
+      const shift = doomed
+        .filter((item) => item.startFrame < clip.startFrame)
+        .reduce((sum, item) => sum + item.durationFrames, 0);
+      if (shift > 0) shifts.push({ clipId: clip.id, from: clip.startFrame, to: clip.startFrame - shift });
+    }
+    for (const clip of doomed) ops.push({ op: 'removeClip', clipId: clip.id, removed: clip });
+    if (shifts.length > 0) ops.push({ op: 'rippleShift', shifts });
+  }
+
+  store.dispatch(ops, doomedTotal === 1 ? '波纹删除' : `波纹删除 ${doomedTotal} 个片段`);
   store.setSelectedClipId(null);
   return true;
 }

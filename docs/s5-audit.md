@@ -94,14 +94,14 @@ const targetTrackId = targetTrack?.id ?? drag.fromTrackId;
 
 ## 三、S5 建议范围（按性价比排序）
 
-### P0 —— 接线与补齐，工作量小、立刻能感知
+### P0 —— ✅ 已完成（2026-10-22，见 `docs/PROJECT-STATUS.md` §3.25）
 
 | 项 | 为什么先做 |
 |---|---|
-| **C1 裁剪吸附** | 复用现成的 `snapFrame`，几行代码；裁剪不吸是"手感差"的最大来源 |
-| **B2 Ctrl 加选接线** | `store.toggleSelection` 已经写好并测过，只差 `pointerDown` 里判断 `ctrlKey/metaKey` |
-| **B3 多选批量删除** | 接上 `getSelection()`，`removeSelectedClip` 改成删全部（一个撤销步） |
-| **D2 拖出轨道区给提示** | 一句话的事，避免"拖了没反应"的困惑 |
+| **C1 裁剪吸附** ✅ | 抽了 `resolveTrimSnapped`，拖动与松手走同一函数（否则"吸上了又跳回去"） |
+| **B2 Ctrl 加选接线** ✅ | `pointerDown` 加 `additive`；**顺带补了多选的可视化**（painter 只认主选的话用户看不到加选） |
+| **B3 多选批量删除** ✅ | 普通删除 + 波纹删除都支持整批；波纹按"每个幸存片段前面的被删时长之和"移 |
+| **D2 拖出轨道区给提示** ✅ | `drag.invalidReason` 区分"出界"与"视频拖音轨" |
 
 ### P1 —— 新功能，规范里明确要求
 

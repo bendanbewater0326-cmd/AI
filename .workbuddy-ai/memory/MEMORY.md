@@ -35,3 +35,25 @@
   `node tests/fixtures/compat/gen-baseline.cjs`（需 ffmpeg），否则 E2E 会大面积失败。
   仓库里保留 `baseline.json` / `expected-meta.json` / `*.cjs` / `ref/*.png`。
 - 提交身份用 `-c user.name=... -c user.email=...` 临时指定，没有全局配置。
+
+## 反复出现的系统性风险：「数据层有、界面没接」
+
+已连续两轮踩到同一个模式（S4 悬停态、S5 Ctrl 加选）：
+`store` / `ephemeral` 里字段和 setter 都写好了、单测也过，但**没有任何 UI 调用点**，
+于是功能从上线起就没生效过，而代码看起来完全正常。
+
+**加任何交互状态时的自检项**：
+1. `grep -rn "<setter名>" src/ui/ src/render/` —— 除了定义处，**必须有调用点**；
+2. 该状态要有**像素级或 DOM 级**断言，只断言 store 字段等于没断言；
+3. 状态优先级要写进注释（如 S4 的 锁定 > 选中 > 悬停 > 默认）。
+
+同类风险还有：`toggleSelection`/`getSelection`（S5 摸底时发现 UI 零调用）。
+
+## 测试坐标换算：不要除/乘 DPR
+
+`layout` 的 `top/height` 与 `getBoundingClientRect()` **都是 CSS 像素**，
+而 `canvas.width / rect.width` 是 DPR。两者混用会让 y 缩一半、落到别的区域
+（实测：拖拽落点命中预览画布或工具栏，表现为"拖了没反应"，极难归因）。
+
+正确：`屏幕 y = rect.top + row.top`，`屏幕 x = rect.left + headerWidth + frame*zoom - scrollX`。
+`getImageData` 才需要乘 DPR。

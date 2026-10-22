@@ -40,7 +40,8 @@
     "e2e:track-s3": "node tests/verify-track-s3.mjs",
     "e2e:relink": "node tests/verify-relink.mjs",
     "e2e:cache": "node tests/verify-draft-cache.mjs",
-    "e2e:clip-states": "node tests/verify-clip-states.mjs"
+    "e2e:clip-states": "node tests/verify-clip-states.mjs",
+    "e2e:s5-p0": "node tests/verify-s5-p0.mjs"
   },
   "dependencies": {
     "gifenc": "^1.0.3",

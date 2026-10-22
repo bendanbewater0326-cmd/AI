@@ -276,6 +276,39 @@ export function resolveTrim(
   return { inFrame: clip.inFrame, outFrame: newOutFrame, startFrame: clip.startFrame, durationFrames: newDuration };
 }
 
+/**
+ * 裁剪 + 吸附（移动与裁剪共用同一套 `snapFrame` / 候选 / 阈值）。
+ *
+ * ## 为什么必须抽成函数
+ *
+ * 拖动过程中（`pointerMove`）和松手时（`pointerUp`）都要算"最终落点"。
+ * 只在 pointerMove 里吸附、pointerUp 里用原始 `deltaFrames` 重算，
+ * 结果就是**看到的吸附了、松手又跳回去**（实测：预览吸到 120，松手落 119）。
+ *
+ * 返回 `snapLine` 供 painter 画吸附线。
+ */
+export function resolveTrimSnapped(
+  doc: Project,
+  clip: Clip,
+  handle: 'left' | 'right',
+  deltaFrames: Frame,
+  alt: boolean,
+): { trimmed: TrimState | null; snapLine: Frame | null } {
+  let trimmed = resolveTrim(doc, clip, handle, deltaFrames);
+  if (trimmed === null) return { trimmed: null, snapLine: null };
+  /**
+   * 吸附的是**被拖的那条边**：左手柄看 `startFrame`，右手柄看片段末尾。
+   * 拿到吸附目标后按差值二次 `resolveTrim` —— 这样 `resolveTrim` 仍然只管
+   * "clamp 到素材边界"，不需要知道吸附的存在。
+   */
+  const edge = handle === 'left' ? trimmed.startFrame : trimmed.startFrame + trimmed.durationFrames;
+  const snappedEdge = snapFrame(edge, collectSnapCandidates(doc, clip.id), doc.zoomLevel, alt);
+  if (!snappedEdge.snapped || snappedEdge.frame === edge) return { trimmed, snapLine: null };
+  const adjusted = resolveTrim(doc, clip, handle, deltaFrames + (snappedEdge.frame - edge));
+  if (adjusted === null) return { trimmed, snapLine: null };
+  return { trimmed: adjusted, snapLine: snappedEdge.frame };
+}
+
 /* ================= 缩放（R-029 / T16 ⑦） ================= */
 
 export function clampZoom(zoom: number): Px {
@@ -327,8 +360,15 @@ export interface TimelineControllerDeps {
   setDraft: (draft: DragDraft | null) => void;
   /** 拖动松手时提交操作（一次拖动一个撤销步）。 */
   commit: (ops: ClipOperation[], label: string) => void;
-  /** 选中片段。 */
+  /** 选中片段（单选，清掉加选）。 */
   select: (clipId: string | null) => void;
+  /**
+   * 加选 / 取消加选（Ctrl+点击）。
+   *
+   * `store.toggleSelection` 早就写好了、也有单测，但**一直没有 UI 调用点** ——
+   * 属于"数据层有、界面没接"（和 S4 的悬停态同一类问题）。
+   */
+  toggleSelection?: (clipId: string) => void;
   /** 播放头 seek（标尺点击）。 */
   seek: (frame: Frame, mode: 'exact' | 'scrub') => void;
   /** 请求重绘（rAF 合帧，TimelineView 提供）。 */
@@ -364,8 +404,17 @@ interface DragState {
   snapLineFrame: Frame | null;
   /** 按下时指针所在的帧（松手时若没拖动，用它把播放头移过来）。 */
   pressFrame: Frame;
-  /** 是否合法（音轨回弹）。 */
+  /** 是否合法（音轨回弹 / 拖出轨道区）。 */
   valid: boolean;
+  /**
+   * 不合法的可读原因（松手时提示用户）。
+   *
+   * 为什么需要：旧实现拖出轨道区会**静默回弹**，用户以为"软件没反应"；
+   * 而"视频拖到音轨"和"拖出轨道区"是两种完全不同的拒绝，提示必须分开。
+   */
+  invalidReason: string | null;
+  /** 本次拖动的 Alt 状态（"临时不吸附"）。松手重算落点要用同一个值。 */
+  alt: boolean;
 }
 
 /**
@@ -375,7 +424,7 @@ interface DragState {
 export function createTimelineController(deps: TimelineControllerDeps) {
   let drag: DragState | null = null;
 
-  function pointerDown(x: number, y: number): void {
+  function pointerDown(x: number, y: number, modifiers: { additive?: boolean } = {}): void {
     const doc = deps.getDoc();
     const ephemeral = deps.getEphemeral();
     // **x 已经是内容坐标**（`TimelineView.laneX()` 里加过 scrollX）。
@@ -389,7 +438,7 @@ export function createTimelineController(deps: TimelineControllerDeps) {
         kind: 'scrub', clipId: null, trackId: null,
         startX: x, fromStart: hit.frame, fromTrackId: '',
         deltaFrames: 0, resolvedStart: null, resolvedTrackId: null,
-        snapLineFrame: null, valid: true, pressFrame: hit.frame,
+        snapLineFrame: null, valid: true, invalidReason: null, alt: false, pressFrame: hit.frame,
       };
       deps.seek(hit.frame, 'scrub');
       return;
@@ -405,6 +454,20 @@ export function createTimelineController(deps: TimelineControllerDeps) {
 
     const clip = findClip(doc, hit.clipId);
     if (clip === undefined) return;
+
+    /**
+     * **Ctrl / Cmd 点击 = 加选**，而且**不进入拖动**。
+     *
+     * 为什么加选后不进入拖动：现在拖动只作用于主选片段（多选批量拖动是后续迭代），
+     * 如果 Ctrl 点击后还能拖，用户会看到"只动了一个"——比不能拖更困惑。
+     * 所以加选是"只选不动"，想拖就松开 Ctrl 正常拖。
+     */
+    if (modifiers.additive === true && deps.toggleSelection !== undefined) {
+      deps.toggleSelection(clip.id);
+      deps.requestPaint();
+      return;
+    }
+
     deps.select(clip.id);
 
     /**
@@ -438,6 +501,8 @@ export function createTimelineController(deps: TimelineControllerDeps) {
       resolvedTrackId: clip.trackId,
       snapLineFrame: null,
       valid: true,
+      invalidReason: null,
+      alt: false,
       pressFrame: hit.frame,
     };
 
@@ -480,6 +545,15 @@ export function createTimelineController(deps: TimelineControllerDeps) {
        * 而且因为 fallback 恰好等于原轨，看起来像"拖了但没动"，极难归因。
        */
       const rowNow = trackRowAtY(trackLayout(doc), y);
+      /**
+       * **拖出轨道区域**（拖到标尺上、或拖到所有轨道下面）：
+       * 目标轨退回原轨，并标记"不合法"。
+       *
+       * 为什么必须显式标记：旧实现只是 `?? drag.fromTrackId` 静默回弹，
+       * 用户拖到轨道区外松手，片段"原地不动"且**没有任何提示** ——
+       * 会以为"软件卡了 / 拖不动"。这是最容易被当成 bug 的静默失败。
+       */
+      const outOfBounds = rowNow === null;
       const targetTrackId = rowNow?.trackId ?? drag.fromTrackId;
 
       // 吸附（移动时吸附片段起始位置）
@@ -491,7 +565,12 @@ export function createTimelineController(deps: TimelineControllerDeps) {
       drag.resolvedStart = resolved.startFrame;
       drag.resolvedTrackId = targetTrackId;
       drag.snapLineFrame = resolved.snapLineFrame ?? (snapped.snapped ? snapped.frame : null);
-      drag.valid = resolved.valid;
+      drag.valid = resolved.valid && !outOfBounds;
+      drag.invalidReason = outOfBounds
+        ? '拖到了轨道区域外，已放回原位'
+        : resolved.valid
+          ? null
+          : '视频片段不能放到音频轨';
 
       deps.setDraft({
         kind: 'move',
@@ -510,8 +589,11 @@ export function createTimelineController(deps: TimelineControllerDeps) {
 
     // trim
     const handle = drag.kind === 'trim-left' ? 'left' : 'right';
-    const trimmed = resolveTrim(doc, clip, handle, deltaFrames);
+    // 记住这次拖动的 Alt 状态：松手时要按同样的规则重算落点
+    drag.alt = alt;
+    const { trimmed, snapLine } = resolveTrimSnapped(doc, clip, handle, deltaFrames, alt);
     if (trimmed !== null) {
+      drag.snapLineFrame = snapLine;
       deps.setDraft({
         kind: 'trim',
         clipId: clip.id,
@@ -520,7 +602,7 @@ export function createTimelineController(deps: TimelineControllerDeps) {
         inFrame: trimmed.inFrame,
         outFrame: trimmed.outFrame,
         durationFrames: trimmed.durationFrames,
-        snapLineFrame: null,
+        snapLineFrame: snapLine,
         valid: true,
       });
       deps.requestPaint();
@@ -556,6 +638,13 @@ export function createTimelineController(deps: TimelineControllerDeps) {
       // 点一下（没拖动）也把播放头移到点击位置：
       // 用户直觉是"点时间线上某个位置 = 到那个位置"，而不是只有 24px 的标尺条能定位。
       if (drag.deltaFrames === 0) deps.seek(drag.pressFrame, 'exact');
+      /**
+       * 被拒绝的拖动**必须说话**：静默回弹是"拖不动"的错觉来源。
+       * 只在真的移动过（deltaFrames ≠ 0）时提示，否则"点一下就报错"更烦人。
+       */
+      if (!drag.valid && drag.deltaFrames !== 0 && drag.invalidReason !== null) {
+        deps.notifyBlocked?.(drag.invalidReason);
+      }
       if (drag.valid && drag.resolvedStart !== null && drag.resolvedTrackId !== null) {
         const from = { trackId: drag.fromTrackId, startFrame: drag.fromStart };
         const to = { trackId: drag.resolvedTrackId, startFrame: drag.resolvedStart };
@@ -565,7 +654,11 @@ export function createTimelineController(deps: TimelineControllerDeps) {
       }
     } else {
       const handle = drag.kind === 'trim-left' ? 'left' : 'right';
-      const trimmed = resolveTrim(doc, clip, handle, drag.deltaFrames);
+      /**
+       * **松手时必须重算一次（带吸附）**，不能直接用 `drag.deltaFrames`。
+       * 拖动中吸附到 120、松手按原始增量算回 119 —— 用户会看到"吸上了又跳回去"。
+       */
+      const { trimmed } = resolveTrimSnapped(doc, clip, handle, drag.deltaFrames, drag.alt);
       if (trimmed !== null && trimmed.durationFrames !== clip.durationFrames) {
         const from: TrimState = { inFrame: clip.inFrame, outFrame: clip.outFrame, startFrame: clip.startFrame, durationFrames: clip.durationFrames };
         deps.commit([buildTrimOperation(clip, from, trimmed)], '裁剪片段');

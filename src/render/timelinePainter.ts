@@ -632,7 +632,14 @@ function drawClip(
   const box = clipBox(clip, row, doc.zoomLevel, state.scrollX);
   if (box.x + box.width < 0 || box.x > state.viewport.width) return; // 视口裁剪
 
-  const isSelected = ephemeral.selectedClipId === clip.id;
+  /**
+   * 选中 = 主选 **或** 加选。
+   *
+   * 多选（Ctrl+点击）在 `store` 里存成"主选 + extraSelectedClipIds"，
+   * 如果这里只看主选，用户 Ctrl 点了三段却只看到一段有描边 ——
+   * 会以为加选没生效（而它其实生效了，按 Delete 会删掉三段）。
+   */
+  const isSelected = ephemeral.selectedClipId === clip.id || ephemeral.extraSelectedClipIds.includes(clip.id);
   const isHovered = ephemeral.hoverClipId === clip.id;
   const isAudio = row.kind === 'audio';
   const isText = clip.text !== null && clip.text !== undefined;

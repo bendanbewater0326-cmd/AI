@@ -297,6 +297,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
           store.dispatch(ops, label);
         },
         select: (clipId) => store.setSelectedClipId(clipId),
+        toggleSelection: (clipId) => store.toggleSelection(clipId),
         seek: (frame, mode) => transport.seekTo(frame, mode),
         requestPaint,
         setZoom: (zoom) => store.setZoomLevel(zoom),
@@ -378,7 +379,13 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     const x = screenX(event);
     // 轨道头：单击不改数据（双击才改名），避免误操作
     if (x < TRACK_HEADER_WIDTH && y >= RULER_HEIGHT) return;
-    getController().pointerDown(laneX(event), y);
+    /**
+     * `Ctrl / Cmd` 点击 = 加选（不进入拖动）。
+     *
+     * Mac 用 `metaKey`：只判 `ctrlKey` 的话 Mac 用户按 Cmd 加选会变成单选，
+     * 而 Cmd 才是 Mac 的惯例键。
+     */
+    getController().pointerDown(laneX(event), y, { additive: event.ctrlKey || event.metaKey });
   }
   /**
    * 指针移动：拖动中交给 controller；**没在拖时更新悬停态与光标**。
