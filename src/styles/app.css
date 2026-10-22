@@ -46,6 +46,10 @@
   --v-tl-text-dim: #8c8c8c;
   /* 离线角标（时间线与素材卡共用，保证两处红一致） */
   --v-tl-offline: #d4380d;
+  /* 片段四态（S4）：锁定蒙层 / 锁定描边 / 悬停加亮 */
+  --v-tl-locked: rgba(0, 0, 0, 0.3);
+  --v-tl-locked-border: #8c8c8c;
+  --v-tl-hover-glow: rgba(255, 255, 255, 0.1);
   --v-warn: #8a6d1f;
   --v-warn-bg: #fdf6e3;
   --v-error: #c0392b;
@@ -1591,6 +1595,10 @@ body.v-track-dragging .v-track-head {
   --v-tl-text-dim: #c8c8c8;
   /* 高对比主题下用更亮的红：深红在 #101010 上几乎看不见 */
   --v-tl-offline: #ff6b3d;
+  /* 黑底上"30% 黑蒙层"等于没画，改用更亮的白蒙层做"压住"的观感 */
+  --v-tl-locked: rgba(255, 255, 255, 0.14);
+  --v-tl-locked-border: #c8c8c8;
+  --v-tl-hover-glow: rgba(255, 255, 255, 0.08);
 }
 
 /* 顶栏主题按钮（R-064）：与其它图标按钮同尺寸 */

@@ -85,6 +85,9 @@ function readColors(): TimelineColors {
     track: pick('--v-track', DEFAULT_TIMELINE_COLORS.track),
     // 分类型底色：必须在 CSS 里定义成变量，否则高对比主题（[data-theme='contrast']）覆盖不到
     offline: pick('--v-tl-offline', DEFAULT_TIMELINE_COLORS.offline),
+    lockedOverlay: pick('--v-tl-locked', DEFAULT_TIMELINE_COLORS.lockedOverlay),
+    lockedBorder: pick('--v-tl-locked-border', DEFAULT_TIMELINE_COLORS.lockedBorder),
+    hoverGlow: pick('--v-tl-hover-glow', DEFAULT_TIMELINE_COLORS.hoverGlow),
     trackVideo: pick('--v-tl-track-video-bg', DEFAULT_TIMELINE_COLORS.trackVideo),
     trackAudio: pick('--v-tl-track-audio-bg', DEFAULT_TIMELINE_COLORS.trackAudio),
     trackText: pick('--v-tl-track-text-bg', DEFAULT_TIMELINE_COLORS.trackText),
@@ -284,6 +287,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   function getController(): ReturnType<typeof createTimelineController> {
     if (controllerRef.current === null) {
       controllerRef.current = createTimelineController({
+        notifyBlocked: (message) => store.pushError(makeError('E_INVALID_PROJECT', message)),
         getDoc: () => store.getDoc(),
         getEphemeral: () => store.getEphemeral(),
         getScrollX: () => scrollXRef.current,
@@ -367,6 +371,8 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onPointerDown(event: React.PointerEvent<HTMLCanvasElement>): void {
+    // 拖动中的光标由这里接管（`onPointerMove` 在拖动时不改光标）
+    if (canvasRef.current !== null) canvasRef.current.style.cursor = 'grabbing';
     event.preventDefault();
     const y = screenY(event);
     const x = screenX(event);
@@ -374,12 +380,56 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     if (x < TRACK_HEADER_WIDTH && y >= RULER_HEIGHT) return;
     getController().pointerDown(laneX(event), y);
   }
+  /**
+   * 指针移动：拖动中交给 controller；**没在拖时更新悬停态与光标**。
+   *
+   * 悬停态在 S4 之前一直是"实现了但没接上"——`ephemeral.hoverClipId` 从来没被写过，
+   * 所以 `drawClip` 里的 hover 分支是死代码。这里补上，并且顺手把光标也管起来：
+   * 光标是最便宜的可发现性提示（用户不用试就知道这里能不能拖、能不能裁）。
+   */
   function onPointerMove(event: React.PointerEvent<HTMLCanvasElement>): void {
     const ctrl = getController();
-    if (ctrl.drag === null) return;
-    // `alt` 在 controller 里是"这次拖动不吸附"：按住 Alt 临时关，
-    // 或者用户已经把吸附整体关掉（`snapEnabled === false`）——两者等价
-    ctrl.pointerMove(laneX(event), screenY(event), event.altKey || !snapEnabled);
+    if (ctrl.drag !== null) {
+      // `alt` 在 controller 里是"这次拖动不吸附"：按住 Alt 临时关，
+      // 或者用户已经把吸附整体关掉（`snapEnabled === false`）——两者等价
+      ctrl.pointerMove(laneX(event), screenY(event), event.altKey || !snapEnabled);
+      return;
+    }
+
+    const doc = store.getDoc();
+    const hit = hitTest(doc, store.getEphemeral(), laneX(event), screenY(event));
+    store.setHoverClipId(hit.clipId);
+
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    if (hit.clipId === null) {
+      // 标尺上给 `pointer`（点了会移动播放头），空白轨道区给默认
+      canvas.style.cursor = hit.zone === 'ruler' ? 'pointer' : 'default';
+      return;
+    }
+    const track = doc.tracks.find((item) => item.id === hit.trackId);
+    if (track?.locked === true) {
+      // 锁定：明确告诉用户"这里不能动"，而不是拖了才被拒
+      canvas.style.cursor = 'not-allowed';
+      return;
+    }
+    canvas.style.cursor =
+      hit.zone === 'clip-handle-left' || hit.zone === 'clip-handle-right' ? 'ew-resize' : 'grab';
+  }
+
+  /**
+   * 指针离开画布。
+   *
+   * 两件事必须一起做：
+   * 1. `cancel()` —— 拖动中离开画布要放弃这次拖动（否则回来时草稿还挂着）；
+   * 2. 清悬停态 + 光标 —— 否则最后一次悬停的片段会一直亮着，
+   *    而 `canvas.style.cursor` 会一直停在 `grab`。
+   */
+  function onPointerLeave(): void {
+    getController().cancel();
+    store.setHoverClipId(null);
+    const canvas = canvasRef.current;
+    if (canvas !== null) canvas.style.cursor = 'default';
   }
   function onPointerUp(): void {
     getController().pointerUp();
@@ -1089,7 +1139,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerLeave={() => getController().cancel()}
+        onPointerLeave={onPointerLeave}
         onContextMenu={onContextMenu}
         onWheel={onWheel}
       />

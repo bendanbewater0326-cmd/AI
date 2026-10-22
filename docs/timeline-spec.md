@@ -689,7 +689,7 @@ store.dispatch(ops)                    ← GUI 与 Agent 的唯一入口
 | **S1** | 几何收敛：`trackLayout` + 测试钩子 + 6 个 E2E 去硬编码 | `core/trackLayout.ts`、`ui/App.tsx`、6 个 E2E | 全部 E2E 仍绿（常量还没改） |
 | **S2** | 轨道头改造：130px + 类型图标 + 四按钮 + ⋮ 菜单 + 类型底色 | `ui/TrackHeader.tsx`（新）、`app.css` | 三种轨底色可辨；⋮ 菜单 6 项可用 |
 | **S3** ✅ | 轨道高度 60/50/32 + 拖拽调节 + 拖拽排序 + 复制/上移下移 | `core/trackOps.ts`（新）、`setTrackHeight`/`reorderTracks` 两个 op | 已完成：`track-ops` 22 单测 + `verify-track-s3` 14 项 E2E。拖边缘 24–120 可调、排序后层级同步、复制一步撤销 |
-| **S4** | 片段四态 + 类型视觉（标题条/音量线/淡入淡出点/效果圆点） | `timelinePainter`、`clipStyle` | 悬停亮度+把手；选中 2px 描边；锁定灰蒙层 |
+| **S4** ✅ | 片段四态（本轮）+ 类型视觉（标题条/波形/效果圆点 → S8） | `timelinePainter`、`timelineController`、`store.setHoverClipId` | 已完成四态：`verify-clip-states` 16 项（全读像素）。**顺手修了两处"实现了没接上"**：悬停态是死代码（hoverClipId 从没被写）、锁定没有拦拖动 |
 | **S5** | 交互补齐：框选、Ctrl 加选、时长气泡、跨轨指示线、Shift 波纹裁剪 | `timelineController` | 框选相交即选中；Shift 裁后片段前移且一步撤销 |
 | **S6** | 转场片段（画在接缝 + 拖边改时长 + 双击换类型） | painter + controller + `maxTransitionFrames` | 转场宽度随时长变；超上限被夹住 |
 | **S7** | 三套右键菜单 + 空白处缩放/加轨 | `TimelineView` | 三处菜单齐全；删除项浅红置底 |

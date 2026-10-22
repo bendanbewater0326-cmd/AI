@@ -339,6 +339,14 @@ export interface TimelineControllerDeps {
   requestPaint: () => void;
   /** 缩放（以播放头为锚）。 */
   setZoom: (zoom: Px) => void;
+  /**
+   * 操作被拒绝时给一句可读提示（例如"轨道已锁定"）。
+   *
+   * 为什么需要：锁定轨上的片段**能选中**（用户要能看它的属性），
+   * 但拖动/裁剪必须被拒绝。拒绝时如果不说话，用户会以为"软件卡了"——
+   * 这是所有剪辑软件里最容易让人暴躁的一类反馈缺失。
+   */
+  notifyBlocked?: (message: string) => void;
 }
 
 /** 拖拽进行中的状态。 */
@@ -402,6 +410,21 @@ export function createTimelineController(deps: TimelineControllerDeps) {
     const clip = findClip(doc, hit.clipId);
     if (clip === undefined) return;
     deps.select(clip.id);
+
+    /**
+     * **锁定轨：允许选中，拒绝拖动/裁剪**。
+     *
+     * 顺序很重要：先 `select`（用户要能选中它去右栏看属性、或者干脆解锁），
+     * 再拦拖动。如果连选中都拦掉，用户点一下完全没反应，会以为界面坏了。
+     *
+     * 锁定是轨道级的（S3 的决定），所以判 `track.locked` 而不是片段字段。
+     */
+    const ownerTrack = doc.tracks.find((track) => track.id === clip.trackId);
+    if (ownerTrack?.locked === true) {
+      deps.notifyBlocked?.(`轨道 ${ownerTrack.name} 已锁定，先解锁才能拖动或裁剪`);
+      deps.requestPaint();
+      return;
+    }
 
     const isLeftHandle = hit.zone === 'clip-handle-left';
     const isRightHandle = hit.zone === 'clip-handle-right';

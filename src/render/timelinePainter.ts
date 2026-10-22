@@ -64,6 +64,12 @@ export interface TimelineColors {
   trackAlt: string;
   /** 离线素材的角标底色（红）。 */
   offline: string;
+  /** 锁定态的蒙层（30% 黑，规范 §3.1）。 */
+  lockedOverlay: string;
+  /** 锁定态的描边：**不用主色**——主色在这套配色里表示"可操作"。 */
+  lockedBorder: string;
+  /** 悬停时的"亮度提升"：叠一层 10% 白，比 `filter: brightness()` 便宜得多。 */
+  hoverGlow: string;
   /** 分类型底色（2026-10-22）：视频浅灰 / 音频浅蓝 / 字幕最浅。 */
   trackVideo: string;
   trackAudio: string;
@@ -98,6 +104,9 @@ export const DEFAULT_TIMELINE_COLORS: TimelineColors = {
   track: '#f7f7f7',
   trackAlt: '#f0f0f0',
   offline: '#d4380d',
+  lockedOverlay: 'rgba(0, 0, 0, 0.30)',
+  lockedBorder: '#8c8c8c',
+  hoverGlow: 'rgba(255, 255, 255, 0.10)',
   trackVideo: '#f5f5f5',
   trackAudio: '#f0f7ff',
   trackText: '#fafafa',
@@ -638,6 +647,26 @@ function drawClip(
    */
   const track = doc.tracks.find((item) => item.id === row.trackId);
   const dimmed = track === undefined ? false : !isTrackVisible(doc, track);
+  /**
+   * ---- 片段四态（S4）----
+   *
+   * 优先级 **锁定 > 选中 > 悬停 > 默认**。
+   *
+   * 为什么锁定压过选中：锁定是"这段不能动"，选中是"我正看着它"。
+   * 一个被锁住的片段被选中时，如果还画主色描边，用户会以为可以拖 ——
+   * 拖动确实会被拒绝（`timelineController` 里拦），那种"看着能拖、拖了没反应"
+   * 的落差比"一看就不能拖"糟得多。
+   *
+   * 锁定是**轨道级**的（S3 定的：不设片段级锁定）：轨道一锁，整条轨的片段一起进锁定态。
+   */
+  const locked = track?.locked === true;
+  const visual: 'locked' | 'selected' | 'hovered' | 'default' = locked
+    ? 'locked'
+    : isSelected
+      ? 'selected'
+      : isHovered
+        ? 'hovered'
+        : 'default';
 
   ctx.save();
   if (dimmed) ctx.globalAlpha = 0.38;
@@ -669,15 +698,33 @@ function drawClip(
     }
   }
 
-  // 边框：选中 2px 主色，悬停淡色，普通 1px 边框
+  /**
+   * 悬停态：叠一层 10% 白（"亮度提升"）。
+   *
+   * 为什么不用 `ctx.filter = 'brightness(1.1)'`：那个滤镜会走一条离屏合成路径，
+   * 100 个片段重绘时是实打实的性能开销（T15 的 0.1ms 指标就是这条红线）。
+   * 叠一层半透明白色在视觉上几乎等价，而 `fillRect` 是纯光栅操作。
+   */
+  if (visual === 'hovered') {
+    ctx.save();
+    ctx.fillStyle = colors.hoverGlow;
+    roundRect(ctx, x, y + 2, width, height - 4, radius);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 边框：锁定=灰、选中=2px 主色、悬停=1.5px 淡主色、默认=1px 细边
   ctx.beginPath();
   roundRect(ctx, x, y + 2, width, height - 4, radius);
-  if (isSelected) {
+  if (visual === 'locked') {
+    ctx.strokeStyle = colors.lockedBorder;
+    ctx.lineWidth = 1.5;
+  } else if (visual === 'selected') {
     ctx.strokeStyle = colors.selection;
     ctx.lineWidth = 2;
-  } else if (isHovered) {
+  } else if (visual === 'hovered') {
     ctx.strokeStyle = colors.hover;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
   } else {
     ctx.strokeStyle = colors.border;
     ctx.lineWidth = 1;
@@ -725,11 +772,41 @@ function drawClip(
     ctx.fillText(label, x + 6, y + height - 12);
   }
 
-  // 左右裁切手柄（选中时显示，供 T16 命中）
-  if (isSelected) {
+  /**
+   * 左右裁切把手。
+   *
+   * - **选中**：实色（明确"这就是能拖的地方"）；
+   * - **悬停**：半透明（"移上来才发现能裁"，符合规范"悬停态把手显现"）；
+   * - **锁定**：不画（锁定的片段没有可拖的地方，画了就是骗人）。
+   */
+  if (visual === 'selected' || visual === 'hovered') {
+    ctx.save();
+    if (visual === 'hovered') ctx.globalAlpha = 0.55;
     ctx.fillStyle = colors.accent;
     ctx.fillRect(x, y + 2, HANDLE_WIDTH, height - 4);
     ctx.fillRect(x + width - HANDLE_WIDTH, y + 2, HANDLE_WIDTH, height - 4);
+    ctx.restore();
+  }
+
+  /**
+   * 选中态的四角锚点（规范 §3.1）。
+   *
+   * **纯视觉，不响应拖拽**：时间线上没有"拖角缩放"这个操作（缩放是属性栏的事）。
+   * 画它是为了让选中的片段"框得住"，同时尺寸压到 3px —— 太大就会被当成可拖的把手。
+   * 锁定态不画（同把手）。
+   */
+  if (visual === 'selected' && width > 12 && height > 12) {
+    ctx.save();
+    ctx.fillStyle = colors.selection;
+    for (const [cx, cy] of [
+      [x + 1.5, y + 3.5],
+      [x + width - 1.5, y + 3.5],
+      [x + 1.5, y + height - 3.5],
+      [x + width - 1.5, y + height - 3.5],
+    ] as const) {
+      ctx.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+    }
+    ctx.restore();
   }
 
   /**
@@ -756,6 +833,24 @@ function drawClip(
   if (offline) {
     ctx.save();
     ctx.fillStyle = 'rgba(120, 120, 120, 0.40)';
+    roundRect(ctx, x, y + 2, width, height - 4, radius);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * 锁定态：**30% 黑蒙层**（规范 §3.1）。
+   *
+   * 位置很讲究：必须在"离线灰蒙层之后、所有徽标之前"。
+   * - 早于离线蒙层：会被那层 40% 灰冲淡，锁定看起来比离线还浅；
+   * - 晚于徽标：把「离线」「静音」这些状态说明也压暗了，用户看不清为什么不能动。
+   *
+   * 用黑色而不是灰色：离线已经用灰（表示"褪色/失效"），锁定用黑（表示"压住/不可操作"），
+   * 两种语义在视觉上能分开；两者同时出现时总暗度约 0.58，确实"双重失效"，符合事实。
+   */
+  if (locked) {
+    ctx.save();
+    ctx.fillStyle = colors.lockedOverlay;
     roundRect(ctx, x, y + 2, width, height - 4, radius);
     ctx.fill();
     ctx.restore();
@@ -803,6 +898,27 @@ function drawClip(
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.fillText(text, leftEdge + 4, y + 24);
+  }
+
+  /**
+   * 「锁」角标：**右上角**。
+   *
+   * 为什么在右上：左上已经被「静音」（y+4）和「离线」（y+18）占了，
+   * 三者可能同时成立（锁定 + 离线的静音片段），挤在一起谁都看不清。
+   * 用灰底而不是红底：锁定不是错误状态，红色留给"素材没了"。
+   */
+  if (locked && width > 30) {
+    const text = '锁';
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const badgeW = Math.min(width - 6, ctx.measureText(text).width + 8);
+    const rightEdge = x + width - (isSelected ? HANDLE_WIDTH + 2 : 2);
+    ctx.fillStyle = colors.lockedBorder;
+    roundRect(ctx, rightEdge - badgeW, y + 4, badgeW, 12, 3);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, rightEdge - 4, y + 10);
   }
 
   ctx.restore();

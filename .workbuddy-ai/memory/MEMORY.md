@@ -23,3 +23,15 @@
 后续优化项记在 `docs/backlog.md`（拷贝队列持久化、配额显示+弱进度、工程打包导出）。
 **合入主分支前注意**：此目录不是 git 仓库；`tests/fixtures/` 有 188MB 测试素材，
 建议忽略大文件 + 用 `gen-baseline.cjs` 生成（详见 backlog 附录）。
+
+## 版本管理（2026-10-22 建立）
+
+- 仓库已在本地初始化（`git init`），首次提交 `37eb021`，第二次 `fa6987f`（README + 行尾规范）。
+- **还没有远端**（`git remote -v` 为空）。接远端后直接 `git push -u origin main`。
+- `.gitattributes` 统一 `eol=lf`：此前一半文件是 CRLF，跨平台会出现"整文件被改动"的假 diff。
+  写 `.gitignore` / `.gitattributes` **必须用 LF 行尾**（用 python 写要 `newline='\n'`，
+  否则规则末尾带 `\r` 匹配不上，踩过一次）。
+- `tests/fixtures/` 的音视频（~188MB）**不进仓库**，新环境首次 clone 后要先跑
+  `node tests/fixtures/compat/gen-baseline.cjs`（需 ffmpeg），否则 E2E 会大面积失败。
+  仓库里保留 `baseline.json` / `expected-meta.json` / `*.cjs` / `ref/*.png`。
+- 提交身份用 `-c user.name=... -c user.email=...` 临时指定，没有全局配置。

@@ -141,6 +141,13 @@ export interface ProjectStore {
   setDropGhost(ghost: DropGhost | null): void;
   /** 轨道排序拖拽预览（null = 没在拖）。同样只在值变了才通知。 */
   setTrackDrag(drag: TrackDrag | null): void;
+  /**
+   * 悬停片段（null = 没悬停）。
+   *
+   * **只在值真的变了才 notify**：指针在同一片段内移动时每帧都会调这里，
+   * 无条件 notify 会让整条时间线每个 mousemove 都重绘一次。
+   */
+  setHoverClipId(clipId: string | null): void;
   /** 切换吸附，返回切换后的状态（给 toast / 按钮读）。 */
   toggleSnap(): boolean;
   setSelectedClipId(clipId: string | null): void;
@@ -611,6 +618,12 @@ export function createStore(initialDoc?: Project): ProjectStore {
         return;
       }
       ephemeral = { ...ephemeral, dropGhost: ghost };
+      notify();
+    },
+
+    setHoverClipId(clipId: string | null): void {
+      if (ephemeral.hoverClipId === clipId) return;
+      ephemeral = { ...ephemeral, hoverClipId: clipId };
       notify();
     },
 
