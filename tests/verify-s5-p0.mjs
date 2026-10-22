@@ -123,6 +123,18 @@ async function drag(from, to, options = {}) {
     });
     await sleep(35);
   }
+  /**
+   * 落点要"复述"一次再松手。
+   *
+   * 全量连跑时这条偶发失败（`⑥ 拖出轨道区：位置 0 → 24`）：最后一次 mousemove 与
+   * mouseReleased 之间没有间隔，负载高时浏览器会把最后那次移动丢掉，
+   * pointerup 于是用了**上一格**（还在轨道里）的位置 → 被当成合法落点。
+   * 复述一次 + 60ms 间隔，保证"松手时控制器看到的位置"就是测试以为的位置。
+   * （单独跑必过、连跑偶红 —— 是输入派发的时序问题，不是产品行为。）
+   */
+  await sleep(60);
+  await page.session.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: to.x, y: to.y, button: 'left', modifiers });
+  await sleep(60);
   await page.session.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', clickCount: 1, modifiers });
   await sleep(450);
 }

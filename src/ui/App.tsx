@@ -374,10 +374,27 @@ interface PreviewStageProps {
   playing: boolean;
   onToggle: () => void;
   onSeek: (frame: number) => void;
+  /** 当前播放头（逐帧按钮用；与时间线/键盘走同一个 seek）。 */
+  frame: number;
   /** 预览总音量（0..2）：只影响监听，不影响导出。 */
   volume: number;
   onVolume: (value: number) => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
+}
+
+/**
+ * 逐帧按钮的图标（内联 SVG，不用 ⏮/⏭）。
+ *
+ * 理由同 S1.3 的 Tab 图标：这两个字符在 Windows 上会走彩色 emoji 字体，
+ * 大小和基线都跟旁边的 ▶ 对不齐，看起来像两套图标混用。
+ */
+function FrameStepIcon({ dir }: { dir: 'prev' | 'next' }): ReactElement {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M6 5v14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d={dir === 'prev' ? 'M19 5l-10 7 10 7z' : 'M5 5l10 7-10 7z'} fill="currentColor" />
+    </svg>
+  );
 }
 
 /** 中列：预览画布（T13 接 playbackEngine）+ 播放控件条。 */
@@ -493,51 +510,79 @@ function PreviewOfflineHint(): ReactElement | null {
   );
 }
 
-function PreviewStage({ playing, onToggle, onSeek, volume, onVolume, canvasRef }: PreviewStageProps): ReactElement {
+function PreviewStage({ playing, onToggle, onSeek, frame, volume, onVolume, canvasRef }: PreviewStageProps): ReactElement {
   return (
     <section className="v-stage" data-v="stage" aria-label="预览">
       <div className="v-stage__viewport">
         <div className="v-stage__screen" data-v="preview">
           <canvas ref={canvasRef} className="v-stage__canvas" data-v="preview-canvas" />
           <PreviewOfflineHint />
+          {/*
+            S1.5：控制栏**叠在画面上**（绝对定位、底部居中），不再独占一行。
+            这样预览区能多出 36px 高度；DOM 里放在 screen 内部，是为了让它跟着
+            16:9 画面走（画面留黑边时也贴在画面底边，而不是整个舞台的底边）。
+            内容与事件一个没动：播放/上一帧/下一帧/时间码/音量全在原处。
+          */}
+          <div className="v-ctrlbar" data-v="ctrlbar">
+            {/*
+              逐帧：与键盘 ←/→ 走**同一个** onSeek（transport.seekTo），不新增任何逻辑。
+              夹到 0 只是防止负帧号，上界交给 transport。
+            */}
+            <button
+              type="button"
+              data-v="frame-prev"
+              title="上一帧（←）"
+              aria-label="上一帧"
+              onClick={() => onSeek(Math.max(0, frame - 1))}
+            >
+              <FrameStepIcon dir="prev" />
+            </button>
+            <button
+              type="button"
+              data-v="play-toggle"
+              title={playing ? '暂停（空格）' : '播放（空格）'}
+              aria-label={playing ? '暂停' : '播放'}
+              aria-pressed={playing}
+              onClick={onToggle}
+            >
+              {playing ? '❚❚' : '▶'}
+            </button>
+            <button
+              type="button"
+              data-v="frame-next"
+              title="下一帧（→）"
+              aria-label="下一帧"
+              onClick={() => onSeek(frame + 1)}
+            >
+              <FrameStepIcon dir="next" />
+            </button>
+            <Timecode onSeek={onSeek} />
+            <span className="v-ctrlbar__spacer" />
+            {/* 预览音量：只听，不影响导出（片段音量在右侧属性栏「声音」组里，会写进导出） */}
+            <label
+              className="v-ctrlbar__volume"
+              title="预览音量（只影响听感，不影响导出）：100% = 0dB，200% = +12dB"
+            >
+              <span aria-hidden="true">🔊</span>
+              <input
+                type="range"
+                data-v="preview-volume"
+                min={0}
+                max={2}
+                step={0.05}
+                value={volume}
+                aria-label="预览音量"
+                onChange={(event) => onVolume(Number(event.target.value))}
+              />
+              <span className="v-ctrlbar__volume-value" data-v="preview-volume-value">
+                {formatDb(positionToDb(volume))}
+              </span>
+              <span className="v-ctrlbar__volume-pct" data-v="preview-volume-percent">
+                {formatPercent(volume)}
+              </span>
+            </label>
+          </div>
         </div>
-      </div>
-      <div className="v-ctrlbar" data-v="ctrlbar">
-        <button
-          type="button"
-          data-v="play-toggle"
-          title={playing ? '暂停（空格）' : '播放（空格）'}
-          aria-label={playing ? '暂停' : '播放'}
-          aria-pressed={playing}
-          onClick={onToggle}
-        >
-          {playing ? '❚❚' : '▶'}
-        </button>
-        <Timecode onSeek={onSeek} />
-        <span className="v-ctrlbar__spacer" />
-        {/* 预览音量：只听，不影响导出（片段音量在右侧属性栏「声音」组里，会写进导出） */}
-        <label
-          className="v-ctrlbar__volume"
-          title="预览音量（只影响听感，不影响导出）：100% = 0dB，200% = +12dB"
-        >
-          <span aria-hidden="true">🔊</span>
-          <input
-            type="range"
-            data-v="preview-volume"
-            min={0}
-            max={2}
-            step={0.05}
-            value={volume}
-            aria-label="预览音量"
-            onChange={(event) => onVolume(Number(event.target.value))}
-          />
-          <span className="v-ctrlbar__volume-value" data-v="preview-volume-value">
-            {formatDb(positionToDb(volume))}
-          </span>
-          <span className="v-ctrlbar__volume-pct" data-v="preview-volume-percent">
-            {formatPercent(volume)}
-          </span>
-        </label>
       </div>
     </section>
   );
@@ -1300,7 +1345,8 @@ export function App(): ReactElement {
           <PreviewStage
             playing={playing}
             onToggle={() => transport.toggle()}
-            onSeek={(frame) => transport.seekTo(frame, 'exact')}
+            onSeek={(target) => transport.seekTo(target, 'exact')}
+            frame={frame}
             volume={volume}
             onVolume={(position) => {
               setVolume(position);

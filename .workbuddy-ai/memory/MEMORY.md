@@ -107,3 +107,13 @@
 `.v-timeline__splitter` 在方案文档里写着"已经能拖"，实际是个 `aria-hidden` 的空 div、
 零事件监听 —— 和 S4 悬停态、S5 Ctrl 加选同一个模式。**动手前 grep 事件绑定**，
 别信文档里的"已完成"。
+
+## 无头测试：有音轨素材播放头不动（2026-10-23 S1.5）
+
+`play()` 会优先选音频时钟；无头浏览器里 AudioContext 不推进，`derivedFrame()`
+永远算回 anchor 帧。症状：`aria-pressed=true` 但 `playheadFrame()` 2 → 2
+（看起来像"播放键坏了"）。**要测播放真的推进，用无音轨素材**（`silent-720p.mp4`）。
+另：`element.click()` 绕过命中测试，被移动/叠加过的控件必须用
+`Input.dispatchMouseEvent` 真实点击 + `elementFromPoint` 命中自身。
+CDP 拖拽的最后一次 `mousemove` 与 `mouseReleased` 之间要留 60ms 并复述落点，
+否则负载高时会丢掉最后一格（s5-p0 偶发红就是这么来的）。

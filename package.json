@@ -44,6 +44,7 @@
     "e2e:s5-p0": "node tests/verify-s5-p0.mjs",
     "e2e:layout": "node tests/verify-layout.mjs",
     "e2e:timeline-height": "node tests/verify-timeline-height.mjs",
+    "e2e:ctrlbar": "node tests/verify-ctrlbar-overlay.mjs",
     "e2e:left-tabs": "node tests/verify-left-tabs.mjs"
   },
   "dependencies": {

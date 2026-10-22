@@ -25,7 +25,7 @@ npm run build    # 打包到 dist/（单文件 main.js）
 ```bash
 npm run check    # 类型检查 + 时基静态扫描（禁止第二处帧/秒换算）
 npm test         # 576 条单测（35 个脚本，Node 直接跑，不需要浏览器）
-npm run e2e      # 全量 E2E（56 个浏览器脚本 + 1 个 Node 性质测试，约 14 分钟，无头）
+npm run e2e      # 全量 E2E（57 个浏览器脚本 + 1 个 Node 性质测试，约 15 分钟，无头）
 npm run e2e:list # 只列清单
 ```
 

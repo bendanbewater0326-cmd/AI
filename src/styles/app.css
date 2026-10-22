@@ -842,10 +842,10 @@ body.v-splitter-dragging--y {
   line-height: 1;
 }
 
-/* 中列：预览 16:9 居中 + 控件条 36px */
+/* 中列：预览 16:9 居中（控制栏叠在画面底部，不占布局行 —— S1.5） */
 .v-stage {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) var(--v-ctrlbar-h);
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   background: var(--v-surface-2);
 }
@@ -859,6 +859,8 @@ body.v-splitter-dragging--y {
 }
 
 .v-stage__screen {
+  /* 控制栏与"素材已离线"提示都绝对定位在这张画面里（S1.5） */
+  position: relative;
   aspect-ratio: 16 / 9;
   /* ⚠️ 这里用的是**视口高度**，因此 `<veditor-panel>` 被嵌进一个高度远小于视口的宿主容器时，
      预览会按整窗高度算宽度、把面板内容撑出容器（实测宿主给 600px 高时，播放按钮被挤到
@@ -866,7 +868,8 @@ body.v-splitter-dragging--y {
      和 ResizeObserver 写 CSS 变量，都没能解决——真正的阻塞点在 `.v-app` 的
      `height: 100%` 于 shadow DOM 里失效（计算值 1233px，而非父容器的 600px）。
      现状：**全屏使用正常**；宿主集成时需给容器足够高度（或自行修正百分比高度链）。 */
-  width: min(100%, calc((100vh - var(--v-topbar-h) - var(--v-ctrlbar-h) - var(--v-timeline-h) - var(--v-splitter-h) - 24px) * 16 / 9));
+  /* 控制栏叠在画面里之后不再占用 36px 布局高度 → 这里也不该再减 --v-ctrlbar-h */
+  width: min(100%, calc((100vh - var(--v-topbar-h) - var(--v-timeline-h) - var(--v-splitter-h) - 24px) * 16 / 9));
   background: #000;
   border: 0.5px solid var(--v-border);
   border-radius: 2px;
@@ -886,25 +889,79 @@ body.v-splitter-dragging--y {
   object-fit: contain;
 }
 
+/*
+ * 预览控制栏（S1.5）：**叠在画面底部居中**，不再独占一行。
+ *
+ * 视觉对齐 opencut-classic / 剪映：半透明黑 + 背景模糊 + 圆角。
+ * 这里刻意偏离了文件头"圆角 ≤ 4px"的极简约束 —— 浮在视频上的胶囊条用 4px 会显得
+ * 像一块贴纸；用户明确要求"圆角处理 + OpenCut 风格"，以需求为准。**仍然不加阴影**
+ * （低对比度下阴影只会糊成一圈灰边，改由 0.5px 浅色描边提供边界）。
+ *
+ * 默认半透明（0.55），鼠标进到画面或条上就变实 —— 不挡画面、又随时可操作。
+ */
 .v-ctrlbar {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  z-index: 5;
   height: var(--v-ctrlbar-h);
+  max-width: calc(100% - 16px);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px;
-  border-top: 0.5px solid var(--v-border);
-  background: var(--v-surface);
+  padding: 0 10px;
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  /* 模糊让底下的画面不干扰读数；不支持的浏览器只是少一层质感，不影响可用性 */
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  opacity: 0.55;
+  transition: opacity 0.16s ease;
+}
+
+/* 悬停在画面上 / 条上 / 键盘聚焦到条内任一控件 → 完全不透明 */
+.v-stage__screen:hover .v-ctrlbar,
+.v-ctrlbar:hover,
+.v-ctrlbar:focus-within {
+  opacity: 1;
+}
+
+/* 深色底上的按钮：透明底 + 白字，悬停才浮出一层浅白 */
+.v-ctrlbar button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-color: transparent;
+  background: transparent;
+  color: #ffffff;
+}
+
+/* 播放键比逐帧键大一圈：它是这条栏的主操作 */
+.v-ctrlbar button[data-v='play-toggle'] {
+  width: 28px;
+  height: 26px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.v-ctrlbar button:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .v-ctrlbar__timecode {
   font-variant-numeric: tabular-nums;
   font-size: 12px;
   letter-spacing: 0.2px;
-  color: var(--v-fg);
+  color: #ffffff;
 }
 
 .v-ctrlbar__spacer {
   flex: 1 1 auto;
+  min-width: 8px;
 }
 
 /* 右属性栏：纵向单列，标签 11px 灰字 + 控件在下 */
@@ -2197,22 +2254,29 @@ body.v-track-dragging .v-track-head {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: var(--v-fg-dim);
+  color: rgba(255, 255, 255, 0.75);
+  /* 画面窄时优先压缩滑轨，而不是把数字挤出条外 */
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .v-ctrlbar__volume input[type='range'] {
   width: 96px;
+  min-width: 44px;
+  flex: 0 1 auto;
+  accent-color: var(--v-accent);
 }
 
 .v-ctrlbar__volume-value {
   /* dB 为主显示：留够 "+12.0 dB" 的宽度，等宽数字避免拖动时抖动 */
   min-width: 52px;
   font-variant-numeric: tabular-nums;
+  color: #ffffff;
 }
 
 .v-ctrlbar__volume-pct {
   min-width: 34px;
-  color: var(--v-fg-dim);
+  color: rgba(255, 255, 255, 0.7);
   font-variant-numeric: tabular-nums;
 }
 

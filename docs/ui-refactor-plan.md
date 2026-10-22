@@ -256,13 +256,18 @@ verify-touch-a11y.mjs      # 断言"时间线可视区在视口内"
 **验收**：`tests/verify-timeline-height.mjs` 16 项（50% 基准是工作区 / 4px 热区在边界 /
 clamp 15%/70% / 刷新记忆 / 无行内污染 / 片段数与 16:9 不变）。
 
-### S1.5 预览控制栏叠到画面底部居中
+### S1.5 预览控制栏叠到画面底部居中 ✅ 已落地 2026-10-23（重构线收官）
 
-- `v-ctrlbar` 从"grid 第二行"改成 `position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%)`
-- 背景半透明黑 + 圆角（剪映/OpenCut 都是浮在画面上）
-- 控制条内容不变（播放/时间码/音量）
+- `v-ctrlbar` 从"grid 第二行"改成 `position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%)`
+- **挂在 `.v-stage__screen`（16:9 画面盒）里**，不是 `.v-stage`：画面留黑边时也要贴画面底边
+- 半透明黑 `rgba(0,0,0,.55)` + `backdrop-filter: blur(6px)` + 8px 圆角 + 0.5px 浅色描边，**不加阴影**
+- 默认 `opacity: .55`，鼠标进画面 / 进条 / 键盘聚焦条内 → 1
+- `.v-stage` 改单行（不再占 36px 布局高度）→ 预览 595×335 → 626×352
+- 顺手：`.v-stage__screen` 补 `position: relative`（「素材已离线」提示原来没有定位上下文）
+- 补上一帧/下一帧按钮（原清单里有、实际没有），复用 `transport.seekTo`
 
-**验收**：控制栏浮在画面上、不挡画面主体；`verify-a-ui` 的播放按钮仍可点。
+**验收**：`tests/verify-ctrlbar-overlay.mjs` 13 项（在画面内/居中/距底 12/舞台只剩一行/
+悬停变实/五控件齐全/真实鼠标点击命中/逐帧生效/820px 不溢出）。
 
 ---
 
