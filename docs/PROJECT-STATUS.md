@@ -49,11 +49,11 @@
 | 任务进度 | **T01–T19 全部完成** | 架构 §任务表 |
 | 里程碑 | M1 能跑 / M2 能剪 / M3 导出 / M4 AI / **M5-M6（P2）13/13 全部交付** | — |
 | 批次增强 | A（音频·导出·UI）/ B（M4 AI）/ C1（文字·调色·音量）/ C2（转场·入出点）/ C3（变速·关键帧·剪贴板）全部交付 | — |
-| 源码 | **81 个 ts/tsx**（+ `app.css` = 82 文件 / 32357 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
+| 源码 | **82 个 ts/tsx**（+ `app.css` = 83 文件 / 33100 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
 | 单测 | **576 条 / 35 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
-| E2E | **54 个 `verify-*.mjs`**（53 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建产物 | `dist/main.js` **632.3KB**（esbuild 单包） | `npm run build` |
-| 时基静态检查 | **扫描 82 个文件，0 处非法换算** | `npm run check` |
+| E2E | **55 个 `verify-*.mjs`**（54 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建产物 | `dist/main.js` **635.7KB**（esbuild 单包） | `npm run build` |
+| 时基静态检查 | **扫描 83 个文件，0 处非法换算** | `npm run check` |
 
 > 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存。
 > 文件数把上面管道的 `xargs wc -l | tail -1` 换成 `wc -l` 即可。
@@ -1852,7 +1852,8 @@ src/
               curve, lut, mask, frameTransform(旋转/翻转的纯函数)
   ui/         App, TopBar, AssetPanel, TimelineView, InspectorPanel,
               CommandBar, ExportDialog, Toast, ContextMenu(自绘右键菜单),
-              SelfCheck(应用内自检), timelineController, theme
+              SelfCheck(应用内自检), timelineController, theme,
+              splitter(三栏拖拽/折叠), CacheDialog(缓存池管理)
   host/       host(挂载入口：?src= / veditor-panel / postMessage),
               commands(命令分发), projectInput(工程归一化)
   ai/         context, intents, provider, registry, tone, cloudLLM,
@@ -1883,7 +1884,7 @@ npm test         # 576 条单测（35 个 .test.mjs，Node 直接跑）
 npm run check    # 类型检查 + 时基静态扫描
 npm run build    # 生产构建（esbuild）
 npm run dev      # 开发服务器（默认 5173，PORT=xxxx 可改）
-npm run e2e      # **全量 E2E**（54 个脚本串行，约 10 分钟，汇总 + 失败清单；无头浏览器，不弹窗）
+npm run e2e      # **全量 E2E**（55 个脚本串行，约 15 分钟，汇总 + 失败清单；无头浏览器，不弹窗）
 npm run e2e:list # 只列清单（不跑）
 # 两个 4K 脚本（realworld / proxy）失败时**自动重试一次**，成功会打「（重试后通过）」。
 # 原因：4K 解码吃显存，机器上还有用户自己的浏览器在跑 → 单跑必过、连跑偶红。
@@ -1891,10 +1892,10 @@ npm run e2e:list # 只列清单（不跑）
 node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头浏览器）
 ```
 
-> 有 18 个 E2E 配了 npm 别名：`e2e:ui`（a-ui）/ `e2e:export`（m3）/ `e2e:ai`（m4）/ `e2e:c1`（c-ui）/ `e2e:c2`（c2-ui）/ `e2e:host`（postmessage）/ `e2e:png`（png-export）/ `e2e:roughcut`（roughcut）/ `e2e:proxy`（proxy）/ `e2e:project`（project-file）/ `e2e:preset`（preset）/ `e2e:touch`（touch-a11y）/ `e2e:denoise`（denoise）/ `e2e:curve`（curve）/ `e2e:lut`（lut）/ `e2e:mask`（mask）/ `e2e:multicam`（multicam）/ `e2e:transcribe`（transcribe）。
+> 有 31 个 E2E 配了 npm 别名：`e2e:ui`（a-ui）/ `e2e:export`（m3）/ `e2e:ai`（m4）/ `e2e:c1`（c-ui）/ `e2e:c2`（c2-ui）/ `e2e:host`（postmessage）/ `e2e:png`（png-export）/ `e2e:roughcut`（roughcut）/ `e2e:proxy`（proxy）/ `e2e:project`（project-file）/ `e2e:preset`（preset）/ `e2e:touch`（touch-a11y）/ `e2e:denoise`（denoise）/ `e2e:curve`（curve）/ `e2e:lut`（lut）/ `e2e:mask`（mask）/ `e2e:multicam`（multicam）/ `e2e:transcribe`（transcribe）。
 > 其余直接用 `node tests/verify-xxx.mjs`。
 
-### 单测脚本（`tests/*.test.mjs`，24 个 / 403 条）
+### 单测脚本（`tests/*.test.mjs`，35 个 / 576 条）
 
 | 脚本 | 覆盖 | 条数 |
 |---|---|---|
@@ -1921,10 +1922,21 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `mask` | 参数/关键帧求值 + 形状与羽化 + **方位词方向语义** | 10 |
 | `multicam` | 机位轨识别 + 切换序列 + 逐帧单机位可见 + 指令识别 | 10 |
 | `transcribe` | 下混/重采样 16k + 脏片段清洗 + 指令识别 + 无通道拒绝 | 19 |
-| `placement` | 区间空闲判定（左闭右开）+ 选轨 + 新建轨命名 + 能否删轨 | 17 |
-| **合计** | | **403** |
+| `placement` | 区间空闲判定（左闭右开）+ 选轨 + 新建轨命名 + 能否删轨 | 33 |
+| `detach-audio` | 分离音频（只能一次 / 重建音轨命名） | 12 |
+| `export-audio-mix` | 导出混音筛选（role 过滤 / 静音轨剔除） | 10 |
+| `frame-transform` | 画面旋转翻转（顺序：先缩放后旋转） | 19 |
+| `freeze` | 定格 / 倒放（只倒画面） | 11 |
+| `undo-merge` | 连续同键操作合并成一个撤销步 | 8 |
+| `volume` | dB 映射（0dB 在 100%）+ 峰值软限 | 16 |
+| `track-layout` | 轨道几何单一来源（行高可变 / 命中测试） | 20 |
+| `track-ops` | 复制/上下移/拖拽排序 + 高度钳制 | 22 |
+| `relink` | 重链匹配打分（指纹 100 / 名字+大小+时长 / 阈值 95） | 16 |
+| `auto-restore` | 自动恢复四层（缓存→宿主→句柄→目录扫描） | 12 |
+| `draft-cache` | 草稿缓存池（指纹去重 / 并发 2 / 清理未使用） | 11 |
+| **合计** | | **576** |
 
-### E2E 脚本（`tests/verify-*.mjs`，43 个）
+### E2E 脚本（`tests/verify-*.mjs`，55 个）
 
 | 脚本 | 覆盖 |
 |---|---|
@@ -1954,6 +1966,18 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `tracks` | **轨道增删与开关**：＋轨道 → 占用时自动换轨/新建轨 → 删有内容的轨（一次撤销全回来）→ 最后一条视频轨拒绝删除 → 隐藏后预览变黑 → 锁定后 Delete 被拒绝且解锁后生效 |
 | `transcribe` | **R-059 语音识别**：装假宿主 → 收到 16k/8.00s/有声音 → 3 条字幕落点精确 → 重复识别整段替换 → 两次撤销 → 无通道给可读拒绝 |
 | `multicam` | **R-057 多机位**：双击素材（V1 已占用）→ 第二段落 **V2**（真实入口）→ 逐帧扫 240 帧每帧恰好 1 个机位可见 → 一次撤销回滚 |
+| `preview-empty` | **预览花屏**：空内容 / 全轨隐藏 / 撤销到空工程，三种都读画布像素确认「干净的黑」而不是残帧 |
+| `track-s3` | **轨道结构**：高度拖拽（拖完跨轨命中仍对）/ 复制轨道（片段深拷贝只换 id）/ 上下移 / 拖拽排序 |
+| `relink` | **素材重链**：标离线 → 批量重链 → 指纹自动匹配 → 画面恢复（不只断言状态字段） |
+| `draft-cache` | **草稿缓存池**：导入即入池 → 标离线 → 从缓存恢复出画 → 面板统计/清理 |
+| `clip-states` | **S4 片段四态**：全部读画布像素（悬停提亮 / 选中描边与把手 / 锁定蒙层与角标 / 优先级 锁定>选中>悬停） |
+| `s5-p0` | **S5 P0**：裁剪吸附（拖与松手同一函数）/ Ctrl 加选 / 多选批量删除一步撤销 / 拖出轨道区回弹并提示 |
+| `layout` | **S1.2 三栏**：默认 25/50/25、拖拽 clamp 15%–40%、左右折叠、刷新记忆、窄屏 16%（**必须真刷新**才测得到挂载逻辑） |
+| `audio-controls` | 音量滑块立即生效（不用等松手）+ 轨道闸门真的到了音频链路 |
+| `audio-menu` | 右键音频菜单 7 项，导出产物用 `Browser.setDownloadBehavior` 落盘校验文件头 |
+| `transform` | 旋转 90° / 水平垂直翻转 / 定格 / 倒放 |
+| `freeze-reverse` | 定格 3 秒（切分 + 全轨波纹）与倒放的组合 |
+| `dragdrop` | 素材拖入时间线（自定义 MIME / 落轨规则 / 出界提示） |
 | `d-cases` | **不是浏览器 E2E**：Node 里跑时基性质对拍（esbuild 加载 timebase） |
 
 > **没有 `verify-t17.mjs`**：T17 的验收断言并入了 `timeline-controller` 单测，别再找它。
@@ -2318,6 +2342,14 @@ D:/项目专用文件夹/剪辑工具/
 
 ### 9.3 测试的坑
 
+- **测「挂载 / 初始化」逻辑时，别在测试里手动补齐被测代码的副作用**：S1.2 的窄屏 bug 在挂载
+  `useEffect` 里（无条件写行内 `--v-left-w: 25%`，把媒体查询盖成死代码）。第一版断言写的是
+  "清 localStorage + 手动 `removeProperty` 掉行内值 → 断言 16%"，**带 bug 也是绿的**。
+  改成"清记忆 → 改窗口 → 真的 `location.reload()` → 断言"才有牙（带 bug 读 25.2%、修好 16.1%）。
+  **判据**：测试里出现"手动补齐被测代码本应产生的结果"，这条断言就没牙。
+- **布局类改动要两个方向都测**：S1.2 折叠**左**栏时预览宽度变 4px（面板 `display:none` 脱离 grid 流，
+  剩下子项自动放置往前挤一格），但折叠**右**栏时断言完全通过（尾部少一项、前面列号不变）。
+  凡是"从某一侧移除元素"的布局，只测一侧等于没测。
 - **ffmpeg 的 `volumedetect` / `signalstats` 输出到 stderr**：`execFileSync` 只返回 stdout，
   会误判"静音/黑屏"。**必须用 `spawnSync` 取 `run.stderr`。**
 - **React 17+ 的 `onBlur` 监听的是 `focusout`，不是 `blur`**：派发 `blur` 事件不触发提交。
@@ -2521,8 +2553,21 @@ D:/项目专用文件夹/剪辑工具/
 | **2026-10-22（NLE 基线 + 旋转/定格/倒放）** | 按常规软件行为补齐 | 先写 `docs/nle-baseline.md`（剪映/PR 逐条对照）；**修掉"分离音频只能一次"**；旋转 90°+水平/垂直翻转；定格 3 秒（切分+全轨波纹）；倒放（只倒画面）；吸附开关（`N`/`Alt`）；+42 单测 +2 E2E（46 个脚本）；顺手修三个真 bug（着色器旋转乘错位置、属性栏按钮被裁、工程文件漏存 `role`） |
 | **2026-10-22（新手可读性 + 音频三件事）** | 符号改文字 + 右键菜单 7 项 | 轨道头 `静/隐/锁/删`、顶栏带文字；菜单加「导出这段的音频…/配一段音频…/删除音频」；抽 `importPipeline` 与 `buildPlaceAssetOps` 消除双份实现；**顺手修三个真 bug**（空白右键分支是死代码、导出混音漏 role 过滤、素材缺失时菜单判断抛错）；+17 单测 +6 项新 E2E（44 个脚本） |
 
+| **2026-10-22（预览花屏 + 轨道状态）** | 两个核心体验 bug | 4 个独立缺陷：①`preserveDrawingBuffer:false` 按需重绘 → 改 `true` + **无条件整张清屏**；②层数组非空但全被跳过时不清屏 → 补分支；③空内容/隐藏轨道短路；④静音/隐藏/独奏不实时 → `audioEngine.trackGates` + `applyTrackGates`（直接赋值，不用 `setTargetAtTime`）；12 项 E2E |
+| **2026-10-22（S3 轨道结构）** | 高度拖拽 / 复制 / 上下移 / 拖拽排序 | `core/trackOps`（`buildDuplicateTrackOps` 深拷贝片段只换 id/trackId）+ `core/trackLayout` 几何单一来源；跨轨命中从硬编码 `floor((y-24)/56)` 改成 `trackRowAtY()`；22 单测 + 14 项 E2E |
+| **2026-10-22（素材持久化与重链）** | "刷新必离线 + 重新链接无效" | 4 个缺陷：手动重链（视觉标识 + 单素材 + 批量）、引用持久化、自动匹配重链（指纹 100 / 名字40+大小30+时长30，阈值 95）；**点按钮第一件事就弹选择器**（`await` 之后脱离用户手势 → `input.click()` 被拦）；16 单测 + 21 项 E2E |
+| **2026-10-22（自动恢复优先）** | 刷新后用户零操作 | 四层：缓存池 → 宿主绝对路径 → 句柄权限 → 授权目录扫描（递归 1 层、上限 400 候选）→ 手动兜底；恢复期间显示"正在自动恢复 N 个素材…"不弹离线条；12 单测 + 12 项 E2E |
+| **2026-10-22（草稿缓存池）** | 终极兜底 | 导入即异步拷贝（Electron `drafts/assets` / Web OPFS），指纹去重、并发 2、流式写（2GB 不爆内存）；管理面板（统计/开关/清理未使用/清空）；11 单测 + 12 项 E2E |
+| **2026-10-22（S4 片段四态）** | 默认 / 悬停 / 选中 / 锁定 | 优先级 锁定 > 选中 > 悬停 > 默认；悬停叠 10% 白（不用 `ctx.filter`）、选中 2px 主色 + 实心把手 + 四角锚点、锁定 30% 黑蒙层 + 「锁」角标；顺手修两个历史 bug（悬停态是死代码、锁定按钮没真拦住）；16 项 E2E |
+| **2026-10-22（S5 摸底 + P0 四项）** | 裁剪吸附 / Ctrl 加选 / 多选删除 / 拖出界提示 | 先出「已具备能力 + 待补全缺口」清单（`docs/s5-audit.md`）；抽 `resolveTrimSnapped` 让拖动与松手**走同一函数**（否则"吸上了又跳回去"）；`drag.invalidReason` 区分"轨道区外"与"视频拖音轨"；10 项 E2E |
+| **2026-10-22（UI 重构 S1.0 + S1.1）** | 布局钩子 + 顶栏 48px | 对标 opencut-classic web 编辑器；新增 `uiLayout()` 钩子，`verify-t11` 的 5 条硬编码尺寸断言改成 8 条结构性断言（范围同时容纳 110px 与 25%）；顶栏加撤销/重做/分割，主题/缓存/构建时间收进「工程」下拉 |
+| **2026-10-22（UI 重构 S1.2）** | 三栏百分比 + 拖拽 + 折叠 | 25/50/25 + 4px 分隔条（15%–40% clamp）+ 左右一键折叠 + localStorage 记忆；**三个 E2E 抓出来的真 bug**：折叠按钮盖住分隔条、折叠左栏后预览变 4px（grid 自动放置挤位）、窄屏媒体查询被行内样式盖成死代码；16 项 E2E（`verify-layout`），全量 55/55 |
+
 **当前**：**P0 + P1 + P2 共 64 条全部落地**（4 条为"部分交付"，口径见 §7.1）；postMessage 命令通道已实现（§7.2）。
-下一步不是补需求，而是**真实素材上的手感打磨**与"部分交付"那 4 条要不要接模型。
+需求层面已经没有新功能要补；当前在做的是一条**独立的 UI 重构线**（对标 opencut-classic，
+见 `docs/ui-refactor-plan.md`）：S1.0 布局钩子 / S1.1 顶栏 48px / S1.2 三栏百分比 已完成，
+**S1.3 左栏 9 图标 Tab（待用户拍板图标条是否算在 25% 内）→ S1.4 时间轴 50% → S1.5 控制栏叠画面底部** 待做。
+这条线之外，剩下的都是"真实素材上的手感打磨"与"部分交付"那 4 条要不要接模型。
 
 ---
 
@@ -2535,6 +2580,9 @@ D:/项目专用文件夹/剪辑工具/
 4. 先跑基线：`npm test && npm run check`（约 15 秒，应全绿）。
 5. 改完按 §6 的表找到对应 E2E 跑一遍，再 `npm run build` 看体积有没有异常增长。
 6. 重要交付后更新四处：**§2 数字（连命令一起）**、§3 全史、§7 未交付项、§9 踩坑。
+7. **测试脚本数量变了要一起改**：§2 的 E2E/单测行、§6 的两张表（单测表要能求和）、
+   `package.json` 的 `e2e:*` 别名、`scripts/e2e-all.mjs` 是自动发现的（不用改）。
+   单测表可用一行 python 校验：把所有 `| \`name\` | ... | N |` 的 N 求和是否等于合计。
 
 > 一条经验：本项目 90% 的隐蔽 bug 都出在"**两处写了同一条规则**"或"**单位/返回值语义**"上
 > （见 §9.4 与 §9.1）。改这类代码时，先搜全仓库有没有第二份实现。

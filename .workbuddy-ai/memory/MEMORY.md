@@ -34,7 +34,9 @@
 - `tests/fixtures/` 的音视频（~188MB）**不进仓库**，新环境首次 clone 后要先跑
   `node tests/fixtures/compat/gen-baseline.cjs`（需 ffmpeg），否则 E2E 会大面积失败。
   仓库里保留 `baseline.json` / `expected-meta.json` / `*.cjs` / `ref/*.png`。
-- 提交身份用 `-c user.name=... -c user.email=...` 临时指定，没有全局配置。
+- 提交身份已写进**本仓库** local config：`user.name=veditor` / `user.email=dev@veditor.local`。
+  之前只在临时 `-c` 里传，换会话后 commit 会直接失败（"Author identity unknown"）。
+  不要改成 `--global`。
 
 ## 反复出现的系统性风险：「数据层有、界面没接」
 
@@ -57,3 +59,23 @@
 
 正确：`屏幕 y = rect.top + row.top`，`屏幕 x = rect.left + headerWidth + frame*zoom - scrollX`。
 `getImageData` 才需要乘 DPR。
+
+## 测「挂载 / 初始化」逻辑：必须让那段代码真的跑一遍（2026-10-22 S1.2 教训）
+
+窄屏媒体查询失效的 bug 在挂载 `useEffect` 里。第一版测试写的是
+「清 localStorage + 手动 `removeProperty` 掉行内值 → 断言 16%」，
+**等于替出问题的代码擦了屁股，带 bug 也是绿的**。
+
+正确写法：清记忆 → 改窗口尺寸 → **真的 `location.reload()`** → 再断言。
+验证过一次：带 bug 读到 25.2%、修好 16.1%。
+
+**通用判据**：如果测试里出现"手动补齐被测代码本应产生的副作用"，这条断言就没牙。
+
+## 三栏布局：grid 子项必须显式 `grid-column`（2026-10-22 S1.2）
+
+`.v-body` 是 5 列 grid。面板折叠用 `display: none` 会**让子项脱离 grid 流**，
+剩下的项自动放置往前挤一格 —— 实测折叠左栏后预览宽度变成 4px（落到了分隔条列）。
+所以 5 个子项全部写死 `grid-column: 1..5`。
+
+**阴点**：折叠右栏时不会暴露（尾部少一项、前面列号不变）。
+凡是"从某一侧移除元素"的布局，**两个方向都要测**。
