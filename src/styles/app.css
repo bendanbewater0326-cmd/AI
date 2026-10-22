@@ -870,19 +870,137 @@ body.v-splitter-dragging--y {
 }
 
 /*
+ * 滚动容器：**整块内容一起滚**（我的预设 + 系统预设），不是只让系统预设那个网格滚。
+ * 否则"我的预设"越存越多时，系统预设被挤到看不见，而滚动条只管下半截 —— 很难理解。
+ */
+.v-textpanel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+/* 分区标题行：左标题、右动作（存为预设） */
+.v-textpanel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  gap: 6px;
+}
+
+.v-textpanel__title {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  letter-spacing: 0.3px;
+}
+
+.v-textpanel__save {
+  flex: 0 0 auto;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+  background: transparent;
+}
+
+.v-textpanel__save:disabled {
+  color: var(--v-fg-dim);
+  border-color: var(--v-border);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.v-textpanel__saverow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.v-textpanel__nameinput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--v-fg);
+  background: var(--v-bg);
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+}
+
+.v-textpanel__saverow button {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.v-textpanel__ok {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+}
+
+/*
  * 网格：`auto-fill + minmax(120px, 1fr)` —— 左栏 15%/25%/40% 三档分别是 1/2/4 列，
  * 不用写三个媒体查询。卡片高度由 16:9 决定，`align-content: start` 让最后一行不留拉伸。
  */
 .v-textpanel__grid {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;
   align-content: start;
-  scrollbar-width: thin;
+}
+
+/* 我的预设卡片外面套一层，用来放右上角的删除按钮（按钮不能嵌在按钮里） */
+.v-textcard-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+/*
+ * 删除按钮：只出现在**我的预设**卡片上。
+ * 系统预设没有这个按钮（不是禁用，是根本不渲染）—— 禁用态会让人以为是"权限问题"。
+ */
+.v-textcard__del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 50%;
+  color: var(--v-fg-dim);
+  background: var(--v-surface);
+  border: 0.5px solid var(--v-border);
+  opacity: 0.7;
+  transition: opacity 0.12s ease;
+  z-index: 2;
+}
+
+.v-textcard-wrap:hover .v-textcard__del,
+.v-textcard__del:focus-visible {
+  opacity: 1;
+}
+
+.v-textcard__del:hover {
+  color: var(--v-error);
+  border-color: var(--v-error);
+}
+
+/* 我的预设与系统预设的视觉区分：主色描边（系统预设是普通灰边） */
+.v-textcard--mine .v-textcard__stage {
+  border-color: var(--v-accent);
 }
 
 .v-textcard {

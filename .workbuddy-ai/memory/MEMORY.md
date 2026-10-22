@@ -139,3 +139,10 @@ CDP 拖拽的最后一次 `mousemove` 与 `mouseReleased` 之间要留 60ms 并�
 → **文字被视频盖住**，症状是"doc 里有文字、预览像素一点没变"。
 合成顺序一律走 `core/types.trackCompositeOrder()`（文字 `10000+order`）。
 注意它和 `trackDisplayOrder` **方向相反**：屏幕顺序文字在最上一行，合成顺序文字最后画。
+
+## 同一份数据被两个组件各读一次 = 一定不同步（2026-10-23）
+
+属性栏和左栏文本面板都有"预设列表"，都 `useEffect(..., [])` 只读一次
+→ 在一处新增/删除，另一处永远显示旧数据（用户以为"没存上"）。
+修法：`persist/presets.ts` 写入成功后 `dispatchEvent(PRESETS_CHANGED)`，两边订阅重读。
+**判据：凡是"两处都能改同一份持久化数据"，就必须有变更广播（或共享 store）。**

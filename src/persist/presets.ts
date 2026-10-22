@@ -16,6 +16,20 @@ import { STORE_SETTINGS, db as defaultDb } from './db';
 import type { VeditorDb } from './db';
 
 export const PRESETS_KEY = 'presets';
+
+/**
+ * 预设变更广播。
+ *
+ * 属性栏与左栏「文本」面板**各有一份列表**，都只在挂载时读一次 ——
+ * 在一处新增/删除后，另一处会一直显示旧列表（用户会以为存了但没生效）。
+ * 写入成功后广播一次，两边都重新读。
+ */
+export const PRESETS_CHANGED = 'veditor:presets-changed';
+
+function announcePresetsChanged(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(PRESETS_CHANGED));
+}
 const PRESETS_VERSION = 1;
 
 interface StoredPresets {
@@ -50,6 +64,7 @@ export async function addPreset(
   const next = [preset, ...current.filter((item) => item.id !== preset.id)].slice(0, MAX_PRESETS);
   const written = await write(next, database);
   if (!written.ok) return fail(written.error);
+  announcePresetsChanged();
   return ok(next);
 }
 
@@ -62,5 +77,6 @@ export async function removePreset(
   const next = current.filter((item) => item.id !== id);
   const written = await write(next, database);
   if (!written.ok) return fail(written.error);
+  announcePresetsChanged();
   return ok(next);
 }

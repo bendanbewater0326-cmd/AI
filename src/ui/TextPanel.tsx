@@ -1,5 +1,5 @@
 /**
- * 左栏「文本」面板（第一批：模板库 + 点击应用）。
+ * 左栏「文本」面板（模板库 + 我的预设）。
  *
  * ## 交互规则（三种情况，一条都不能含糊）
  *
@@ -22,22 +22,26 @@
  * 缩放用**容器查询单位**（`cqw`/`cqh`）：卡片宽度是弹性的（左栏可拖 15%–40%），
  * 用 cqw 才能让"1080p 下的 88px"在任何卡片宽度下都保持同一比例。
  *
- * ## 本批**不做**拖拽
+ * ## 「我的预设」为什么不新建一套存储
  *
- * 拖拽要同时改 `dnd.ts` 的 MIME 与 `TimelineView` 的 onDrop，属于第二步。
- * 这里先不加 `draggable` —— 加了却没人接，是"看起来能拖、拖了没反应"的死交互。
+ * R-053 的预设系统（`core/preset` + `persist/presets`）已经能存文字样式：
+ * `capturePreset` 抓 `payload.textStyle`，`buildPresetOps` 套用，存在 settings 里
+ * （跨工程保留）。这里**只做筛选与展示**：`payload.textStyle !== undefined` 的就是文字预设。
+ * 另起一套的话，属性栏存的预设在这里看不到，用户会以为"存丢了"。
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
-import { createClip, createTextContent } from '../core/types';
+import { createClip, createTextContent, makeError } from '../core/types';
 import type { TextContent } from '../core/types';
 import { ensureTextTrackOps } from '../core/placement';
 import { TEXT_CATEGORIES, TEXT_CLIP_SECONDS, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
 import type { TextCategory, TextPreset } from '../core/textPresets';
-import { store } from '../core/store';
+import { MAX_PRESET_NAME, buildPresetOps, capturePreset, createPreset } from '../core/preset';
+import type { Preset } from '../core/preset';
+import { PRESETS_CHANGED, addPreset, loadPresets, removePreset } from '../persist/presets';
+import { store, useDoc, useSelection } from '../core/store';
 import { secondsToFrames } from '../core/timebase';
 import { clearDraggingText, setTextDrag } from './dnd';
-
 
 /**
  * 缩略图放大倍数。
@@ -48,6 +52,9 @@ import { clearDraggingText, setTextDrag } from './dnd';
  * 位置（x/y）保持 1:1，否则「左上角标」会被放大到卡片外面去。
  */
 const PREVIEW_ZOOM = 1.8;
+
+/** 我的预设卡片上的示意文字（预设不存内容，见 `capturePreset`）。 */
+const USER_PREVIEW_TEXT = '示例文字';
 
 /** 把 1080p 的绝对像素换算成卡片里的容器查询单位。 */
 function previewStyle(style: TextPreset['style']): Record<string, string> {
@@ -90,8 +97,41 @@ export function TextPanel(): ReactElement {
   const [category, setCategory] = useState<TextCategory | 'all'>('all');
   const visible = textPresetsIn(category);
 
+  /** 选中的片段是不是文字片段（决定「存为预设」能不能点）。 */
+  const selectedId = useSelection();
+  const isTextSelected = useDoc((doc) => {
+    if (selectedId === null) return false;
+    for (const track of doc.tracks) {
+      const hit = track.clips.find((clip) => clip.id === selectedId);
+      if (hit !== undefined) return hit.text !== null && hit.text !== undefined;
+    }
+    return false;
+  });
+
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [presetName, setPresetName] = useState('');
+
+  // 预设存在 settings（IDB），跨工程保留；这里只取"带文字样式"的那些。
+  // 订阅变更广播：属性栏那边也可能存/删预设，两边要同步（否则"存了但这边没出现"）
+  useEffect(() => {
+    let cancelled = false;
+    const reload = (): void => {
+      void loadPresets().then((list) => {
+        if (!cancelled) setPresets(list);
+      });
+    };
+    reload();
+    window.addEventListener(PRESETS_CHANGED, reload);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PRESETS_CHANGED, reload);
+    };
+  }, []);
+  const userPresets = presets.filter((preset) => preset.payload.textStyle !== undefined);
+
   /** 在播放头新建一段文字（落文字轨；建轨与落片同批提交 = 一个撤销步）。 */
-  function createText(preset: TextPreset | null): void {
+  function createText(text: TextContent, label: string): void {
     const doc = store.getDoc();
     const startFrame = store.getPlayheadFrame();
     const durationFrames = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, doc.fpsMilli));
@@ -103,30 +143,78 @@ export function TextPanel(): ReactElement {
       inFrame: 0,
       outFrame: durationFrames,
       durationFrames,
-      // 模板里的字号/位置是 1080p 参考值，必须按当前工程分辨率换算
-      text:
-        preset === null
-          ? createTextContent()
-          : presetToText(preset, undefined, { width: doc.width, height: doc.height }),
+      text,
     });
-    store.dispatch([...ops, { op: 'addClip', clip }], preset === null ? '添加文字' : `添加文字（${preset.name}）`);
+    store.dispatch([...ops, { op: 'addClip', clip }], label);
     // 立刻选中：右侧属性栏会切到文字控件，用户可以马上改内容
     store.setSelectedClipId(clip.id);
   }
 
-  /** 点模板：选中的是文字片段就套样式（保留内容），否则新建。 */
+  /** 点系统模板：选中的是文字片段就套样式（保留内容），否则新建。 */
   function applyPreset(preset: TextPreset): void {
     const clip = selectedClip();
+    const doc = store.getDoc();
     if (clip === null || clip.text === null || clip.text === undefined) {
-      createText(preset);
+      // 模板里的字号/位置是 1080p 参考值，必须按当前工程分辨率换算
+      createText(presetToText(preset, undefined, { width: doc.width, height: doc.height }), `添加文字（${preset.name}）`);
       return;
     }
-    const doc = store.getDoc();
     const next: TextContent = presetToText(preset, clip.text.content, { width: doc.width, height: doc.height });
     store.dispatch(
       [{ op: 'setClipText', clipId: clip.id, from: clip.text, to: next }],
       `套用文字样式（${preset.name}）`,
     );
+  }
+
+  /** 点我的预设：套到选中的文字片段；没选中文字就用这套样式新建一段。 */
+  function applyUserPreset(preset: Preset): void {
+    const clip = selectedClip();
+    if (clip !== null && clip.text !== null && clip.text !== undefined) {
+      // 复用 R-053 的操作构造：一个撤销步，且只改预设里有的字段
+      const ops = buildPresetOps(clip, preset);
+      if (ops.length === 0) return;
+      store.dispatch(ops, `套用我的预设（${preset.name}）`);
+      return;
+    }
+    createText(createTextContent({ ...(preset.payload.textStyle ?? {}) }), `添加文字（${preset.name}）`);
+  }
+
+  /** 打开"存为预设"：默认名取当前文字内容（比"我的样式 3"好认）。 */
+  function openSave(): void {
+    const clip = selectedClip();
+    const fallback = clip?.text?.content.trim().slice(0, 12) ?? '';
+    setPresetName(fallback === '' ? '我的样式' : fallback);
+    setSaving(true);
+  }
+
+  function saveUserPreset(): void {
+    const clip = selectedClip();
+    if (clip === null) return;
+    const payload = capturePreset(clip);
+    if (payload === null || payload.textStyle === undefined) {
+      store.pushError(makeError('E_INVALID_PROJECT', '当前片段没有可保存的文字样式'));
+      return;
+    }
+    const preset = createPreset(presetName, payload);
+    void addPreset(preset).then((result) => {
+      if (!result.ok) {
+        store.pushError(result.error);
+        return;
+      }
+      setPresets(result.value);
+      setSaving(false);
+      setPresetName('');
+    });
+  }
+
+  function deleteUserPreset(id: string): void {
+    void removePreset(id).then((result) => {
+      if (!result.ok) {
+        store.pushError(result.error);
+        return;
+      }
+      setPresets(result.value);
+    });
   }
 
   return (
@@ -148,44 +236,124 @@ export function TextPanel(): ReactElement {
         ))}
       </div>
 
-      <div className="v-textpanel__grid" data-v="text-grid" data-count={visible.length}>
-        {visible.map((preset) => (
+      <div className="v-textpanel__body" data-v="text-body">
+        {/* ---------- 我的预设（顶部，与系统预设明确分区） ---------- */}
+        <div className="v-textpanel__head">
+          <span className="v-textpanel__title">我的预设</span>
           <button
-            key={preset.id}
             type="button"
-            className="v-textcard"
-            data-v="text-preset"
-            data-preset-id={preset.id}
-            data-category={preset.category}
-            aria-label={`${preset.name}（点击应用，或拖到时间线）`}
-            title={`${preset.name}（点击应用，或拖到时间线）`}
-            onClick={() => applyPreset(preset)}
-            /**
-             * 可拖到时间线（第二步）。
-             *
-             * 用**独立 MIME**（`application/x-veditor-text`）而不是复用素材那个：
-             * 文字的落点语义是"永远落文字轨、只有帧号听用户的"，和素材的
-             * "按目标轨 + 占用避让"完全是两套规则。
-             */
-            draggable
-            onDragStart={(event) => setTextDrag(event.dataTransfer, preset.id)}
-            onDragEnd={clearDraggingText}
+            className="v-textpanel__save"
+            data-v="text-save-preset"
+            disabled={!isTextSelected || saving}
+            title={isTextSelected ? '把当前文字样式存成我的预设' : '先选中一段文字'}
+            onClick={openSave}
           >
-            <span className="v-textcard__stage" data-v="text-preset-preview" data-bg={preset.previewBg}>
-              <span className="v-textcard__text" style={previewStyle(preset.style)}>
-                {preset.content}
-              </span>
-            </span>
-            <span className="v-textcard__name">{preset.name}</span>
+            存为预设
           </button>
-        ))}
+        </div>
+        {saving ? (
+          <div className="v-textpanel__saverow" data-v="text-save-row">
+            <input
+              className="v-textpanel__nameinput"
+              data-v="text-preset-name"
+              value={presetName}
+              maxLength={MAX_PRESET_NAME}
+              aria-label="预设名称"
+              autoFocus
+              onChange={(event) => setPresetName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') saveUserPreset();
+                if (event.key === 'Escape') setSaving(false);
+              }}
+            />
+            <button type="button" className="v-textpanel__ok" data-v="text-preset-confirm" onClick={saveUserPreset}>
+              保存
+            </button>
+            <button type="button" data-v="text-preset-cancel" onClick={() => setSaving(false)}>
+              取消
+            </button>
+          </div>
+        ) : null}
+        {userPresets.length > 0 ? (
+          <div className="v-textpanel__grid" data-v="text-user-grid" data-count={userPresets.length}>
+            {userPresets.map((preset) => (
+              <div className="v-textcard-wrap" key={preset.id}>
+                <button
+                  type="button"
+                  className="v-textcard v-textcard--mine"
+                  data-v="text-user-preset"
+                  data-preset-id={preset.id}
+                  data-mine="true"
+                  aria-label={`${preset.name}（我的预设，点击应用）`}
+                  title={`${preset.name}（我的预设）`}
+                  onClick={() => applyUserPreset(preset)}
+                >
+                  <span className="v-textcard__stage" data-bg="dark">
+                    <span className="v-textcard__text" style={previewStyle(preset.payload.textStyle ?? {})}>
+                      {USER_PREVIEW_TEXT}
+                    </span>
+                  </span>
+                  <span className="v-textcard__name">{preset.name}</span>
+                </button>
+                {/* 删除只出现在**我的预设**上；系统预设没有这个按钮（不是禁用它，是根本不给） */}
+                <button
+                  type="button"
+                  className="v-textcard__del"
+                  data-v="text-user-preset-del"
+                  aria-label={`删除预设 ${preset.name}`}
+                  title="删除这个预设"
+                  onClick={() => deleteUserPreset(preset.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {/* ---------- 系统预设 ---------- */}
+        <div className="v-textpanel__head">
+          <span className="v-textpanel__title">系统预设</span>
+        </div>
+        <div className="v-textpanel__grid" data-v="text-grid" data-count={visible.length}>
+          {visible.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className="v-textcard"
+              data-v="text-preset"
+              data-preset-id={preset.id}
+              data-category={preset.category}
+              aria-label={`${preset.name}（点击应用，或拖到时间线）`}
+              title={`${preset.name}（点击应用，或拖到时间线）`}
+              onClick={() => applyPreset(preset)}
+              /**
+               * 可拖到时间线（第二步）。
+               *
+               * 用**独立 MIME**（`application/x-veditor-text`）而不是复用素材那个：
+               * 文字的落点语义是"永远落文字轨、只有帧号听用户的"，和素材的
+               * "按目标轨 + 占用避让"完全是两套规则。
+               */
+              draggable
+              onDragStart={(event) => setTextDrag(event.dataTransfer, preset.id)}
+              onDragEnd={clearDraggingText}
+            >
+              <span className="v-textcard__stage" data-v="text-preset-preview" data-bg={preset.previewBg}>
+                <span className="v-textcard__text" style={previewStyle(preset.style)}>
+                  {preset.content}
+                </span>
+              </span>
+              <span className="v-textcard__name">{preset.name}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <button
         type="button"
         className="v-textpanel__add"
         data-v="text-add"
-        onClick={() => createText(null)}
+        onClick={() => createText(createTextContent(), '添加文字')}
         title="在播放头位置添加一段空白文字"
       >
         ＋ 添加文字

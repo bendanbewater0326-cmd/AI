@@ -425,6 +425,120 @@ try {
     overflow.gridScroll <= overflow.gridClient + 1 && overflow.cols >= 1,
   );
   await page.session.evaluate("document.documentElement.style.removeProperty('--v-left-w')");
+  await sleep(400);
+
+  // ---- ⑪ 我的预设：把当前文字样式存成个人预设 ----
+  /**
+   * 前置状态：⑧ 之后选中的是「白底黑字条」那段（已被勾上描边 + 加粗）。
+   * 存下来应当抓到 fontSize / color / background / bold / stroke 五项，
+   * **但抓不到 content**（预设只存样式，见 `capturePreset`）。
+   */
+  const countOf = async (selector) => Number(await page.session.evaluate(`document.querySelectorAll(${JSON.stringify(selector)}).length`));
+  const mineBefore = await countOf('[data-v="text-user-preset"]');
+  const saveEnabled = await page.session.evaluate(`!document.querySelector('[data-v="text-save-preset"]').disabled`);
+  report.check(
+    `⑪ 选中文字片段后「存为预设」可用（disabled=${!saveEnabled}，当前我的预设 ${mineBefore} 个）`,
+    saveEnabled === true,
+  );
+  await click('[data-v="text-save-preset"]');
+  const defaultName = await page.session.evaluate(
+    'document.querySelector(\'[data-v="text-preset-name"]\')?.value ?? ""',
+  );
+  await page.session.evaluate(`(() => {
+    const el = document.querySelector('[data-v="text-preset-name"]');
+    if (!el) return false;
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    set.call(el, '我的字幕条');
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  await click('[data-v="text-preset-confirm"]');
+  await sleep(600);
+  const mineAfter = await countOf('[data-v="text-user-preset"]');
+  const mineNames = JSON.parse(
+    await page.session.evaluate(
+      'JSON.stringify([...document.querySelectorAll(\'[data-v="text-user-preset"] .v-textcard__name\')].map((el) => el.textContent))',
+    ),
+  );
+  report.check(
+    `⑪b 保存后出现在「我的预设」（${mineBefore} → ${mineAfter}，名称 ${mineNames.join('/')}，默认名「${defaultName}」）`,
+    mineAfter === mineBefore + 1 && mineNames.includes('我的字幕条'),
+  );
+  /**
+   * 顺带验"两边同步"：属性栏也有一份预设列表，都只在挂载时读一次 ——
+   * 不广播的话，在左栏存完、右栏还显示"还没有预设"，用户会以为没存上。
+   */
+  const inspectorPresets = await countOf('[data-v="preset-apply"]');
+  report.check(
+    `⑪c 属性栏的预设列表同步出现（${inspectorPresets} 条）`,
+    inspectorPresets === mineAfter,
+  );
+
+  // ---- ⑫ 视觉与权限区分：我的预设可删，系统预设没有删除按钮 ----
+  const delCount = await countOf('[data-v="text-user-preset-del"]');
+  const systemDelCount = await page.session.evaluate(
+    `document.querySelectorAll('[data-v="text-preset"] [data-v="text-user-preset-del"]').length`,
+  );
+  const mineBorder = await page.session.evaluate(
+    `getComputedStyle(document.querySelector('[data-v="text-user-preset"] .v-textcard__stage')).borderTopColor`,
+  );
+  const systemBorder = await page.session.evaluate(
+    `getComputedStyle(document.querySelector('[data-v="text-preset"] .v-textcard__stage')).borderTopColor`,
+  );
+  report.check(
+    `⑫ 删除按钮只在我的预设上（我的 ${delCount} 个 / 系统卡片内 ${systemDelCount} 个）`,
+    delCount === mineAfter && systemDelCount === 0,
+  );
+  report.check(
+    `⑫b 视觉可区分（我的边框 ${mineBorder} ≠ 系统边框 ${systemBorder}）`,
+    mineBorder !== systemBorder,
+  );
+
+  // ---- ⑬ 点我的预设：套到选中片段，内容保留 ----
+  await click('[data-v="text-add"]');
+  const fresh = (await textClips()).find((clip) => clip.text?.content === '点击编辑文字');
+  await sleep(200);
+  const freshBefore = { fontSize: fresh?.text?.fontSize, stroke: fresh?.text?.stroke, bold: fresh?.text?.bold };
+  await click('[data-v="text-user-preset"]');
+  await sleep(400);
+  const applied = (await textClips()).find((clip) => clip.id === fresh?.id);
+  report.check(
+    `⑬ 套用我的预设（fontSize ${freshBefore.fontSize} → ${applied?.text?.fontSize}，bold ${freshBefore.bold} → ${applied?.text?.bold}，描边 ${applied?.text?.stroke ? '有' : '无'}）`,
+    applied?.text?.fontSize !== freshBefore.fontSize &&
+      applied?.text?.bold === true &&
+      applied?.text?.stroke !== null &&
+      applied?.text?.stroke !== undefined,
+  );
+  report.check(
+    `⑬b 内容没被预设覆盖（仍是「${applied?.text?.content}」）`,
+    applied?.text?.content === '点击编辑文字',
+  );
+
+  // ---- ⑭ 刷新后我的预设还在（存在 settings，跨工程保留）----
+  await page.session.evaluate('location.reload()');
+  await sleep(2600);
+  await page.session.waitFor('!!window.__VEDITOR_TEST__', 20000);
+  await sleep(1500);
+  await click('[data-v="left-tab-text"]');
+  await sleep(300);
+  const afterReload = await countOf('[data-v="text-user-preset"]');
+  report.check(`⑭ 刷新后我的预设仍在（${afterReload} 个）`, afterReload === mineAfter);
+
+  // ---- ⑮ 删除我的预设：立刻消失且刷新后不复活 ----
+  await click('[data-v="text-user-preset-del"]');
+  await sleep(500);
+  const afterDelete = await countOf('[data-v="text-user-preset"]');
+  await page.session.evaluate('location.reload()');
+  await sleep(2600);
+  await page.session.waitFor('!!window.__VEDITOR_TEST__', 20000);
+  await sleep(1500);
+  await click('[data-v="left-tab-text"]');
+  await sleep(300);
+  const afterDeleteReload = await countOf('[data-v="text-user-preset"]');
+  report.check(
+    `⑮ 删除后消失且刷新不复活（${mineAfter} → ${afterDelete} → ${afterDeleteReload}）`,
+    afterDelete === mineAfter - 1 && afterDeleteReload === afterDelete,
+  );
 } finally {
   report.summary('文本面板：模板库 / 分类筛选 / 点击应用 / 落文字轨 / 描边像素');
   await page.close();

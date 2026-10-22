@@ -28,7 +28,7 @@ import type { ColorGrade } from '../render/compositor';
 import { store, useDoc, useFrame, useSelection } from '../core/store';
 import { buildPresetOps, capturePreset, createPreset, MAX_PRESET_NAME } from '../core/preset';
 import type { Preset } from '../core/preset';
-import { addPreset, loadPresets, removePreset } from '../persist/presets';
+import { PRESETS_CHANGED, addPreset, loadPresets, removePreset } from '../persist/presets';
 import { DEFAULT_DENOISE, denoiseOf } from '../media/denoise';
 import type { DenoiseParams } from '../media/denoise';
 import { curveOf, NEUTRAL_CURVE } from '../render/curve';
@@ -339,9 +339,17 @@ export function InspectorPanel(): ReactElement {
     store.dispatch([{ op: 'setClipText', clipId: clip.id, from: clip.text, to: next }], '编辑文字');
   }
 
-  // 预设是用户偏好（存在 settings 里），进面板时读一次
+  /**
+   * 预设是用户偏好（存在 settings 里），进面板时读一次。
+   * 同时订阅变更广播：左栏「文本」面板也能存/删预设，两边列表要同步。
+   */
   useEffect(() => {
-    void loadPresets().then((list) => setPresets(list));
+    const reload = (): void => {
+      void loadPresets().then((list) => setPresets(list));
+    };
+    reload();
+    window.addEventListener(PRESETS_CHANGED, reload);
+    return () => window.removeEventListener(PRESETS_CHANGED, reload);
   }, []);
 
   /** 载入 LUT（R-058）：.cube 原文存进 effect params（工程文件自带，换机器也能用）。 */
