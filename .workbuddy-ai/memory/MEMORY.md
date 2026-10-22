@@ -117,3 +117,18 @@
 `Input.dispatchMouseEvent` 真实点击 + `elementFromPoint` 命中自身。
 CDP 拖拽的最后一次 `mousemove` 与 `mouseReleased` 之间要留 60ms 并复述落点，
 否则负载高时会丢掉最后一格（s5-p0 偶发红就是这么来的）。
+
+## 任何"模板/贴纸/预设位置"必须按分辨率换算（2026-10-23 文本面板）
+
+`TextContent.x/y/fontSize` 是**项目绝对像素**。模板按 1080p 写死时，
+落到 1280×720 工程上 `y=380` 已超过半画面高（360）→ 文字被推出画面、预览纯黑，
+而 doc 里字段完全正确。**判据：断言要落在画面像素上**（读出来 0.00 就是没画出来）。
+统一做法：`presetToText(preset, content, {width, height})`，按 `height/1080` 缩放
+字号/描边/y，按 `width/1920` 缩放 x。
+
+## 加可选字段要改 4 处（2026-10-23 TextContent.bold/stroke）
+
+`types.ts` 接口 → `render/*.ts` 的绘制**与缓存 key** → `core/preset.ts` 的
+`capturePreset`/`normalizePayload` → `host/projectInput.ts` 的 `normalizeText`。
+漏掉缓存 key：改了样式画面不变（只断言 doc 字段测不出来）。
+漏掉 normalizeText：存盘再打开样式消失。

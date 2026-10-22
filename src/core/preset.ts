@@ -82,6 +82,9 @@ export function capturePreset(clip: Clip): PresetPayload | null {
       color: clip.text.color,
       align: clip.text.align,
       background: clip.text.background,
+      // 预设是"一整套样式"：粗体/描边也要带上，否则套用后两者保持原样，视觉与预设不一致
+      bold: clip.text.bold === true,
+      stroke: clip.text.stroke ?? null,
     };
   }
 
@@ -163,6 +166,17 @@ function normalizePayload(raw: unknown): PresetPayload | null {
       next.align = t['align'];
     }
     if (typeof t['background'] === 'string') next.background = t['background'];
+    // 旧预设里没有这两个字段 → 保持 undefined，套用时不动片段当前值（向后兼容）
+    if (t['bold'] === true || t['bold'] === false) next.bold = t['bold'] === true;
+    const stroke = t['stroke'];
+    if (stroke === null) {
+      next.stroke = null;
+    } else if (typeof stroke === 'object' && stroke !== null) {
+      const s = stroke as Record<string, unknown>;
+      const width = typeof s['width'] === 'number' ? Math.max(0, Math.min(40, s['width'])) : 0;
+      const color = typeof s['color'] === 'string' ? s['color'] : '#000000';
+      if (width > 0) next.stroke = { width, color };
+    }
     if (Object.keys(next).length > 0) payload.textStyle = next;
   }
 

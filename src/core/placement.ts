@@ -98,6 +98,28 @@ export function pickTrackForInsert(
 }
 
 /**
+ * 文字片段落到哪条轨（**手动新建文字 / SRT 导入 / AI 转写共用这一份规则**）。
+ *
+ * 文字必须落在**文字轨**上，不能借用视频轨：
+ * 1. 借用视频轨时，用户之后在它上面新建 V3，文字就被画面盖住（真问题）；
+ * 2. 剪辑软件的通用认知就是"字幕有自己的轨"，混在视频轨里拖动/裁剪时极易误删。
+ *
+ * 返回 `ops` 里可能包含一条 `addTrack`——调用方把它和 `addClip` **一起 dispatch**，
+ * 这样"建轨 + 放字"是一个撤销步，不会留下一条空的文字轨。
+ */
+export function ensureTextTrackOps(
+  doc: Project,
+  startFrame: Frame,
+  durationFrames: Frame,
+  preferId?: string,
+): { ops: ClipOperation[]; trackId: string } {
+  const found = pickTrackForInsert(doc, 'text', startFrame, durationFrames, preferId);
+  if (found !== null) return { ops: [], trackId: found };
+  const track = nextTrackFor(doc, 'text');
+  return { ops: [{ op: 'addTrack', track }], trackId: track.id };
+}
+
+/**
  * 轨道能否删除（不能删时返回**可读原因**，`null` = 可以删）。
  *
  * 规则只有两条，但都很重要：

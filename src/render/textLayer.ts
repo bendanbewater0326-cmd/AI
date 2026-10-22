@@ -23,7 +23,12 @@ export function clearTextLayerCache(): void {
 }
 
 function keyOf(text: TextContent, width: number, height: number): string {
-  return `${width}x${height}|${text.content}|${text.fontSize}|${text.color}|${text.align}|${text.x}|${text.y}|${text.background}`;
+  /**
+   * **新字段必须进缓存 key**，否则"改了描边/粗体，画面纹丝不动"——
+   * 这类 bug 只断言 doc 字段是查不出来的，必须读画布像素（见 `verify-text-panel`）。
+   */
+  const stroke = text.stroke === null || text.stroke === undefined ? '' : `${text.stroke.width}:${text.stroke.color}`;
+  return `${width}x${height}|${text.content}|${text.fontSize}|${text.color}|${text.align}|${text.x}|${text.y}|${text.background}|${text.bold === true ? 'b' : ''}|${stroke}`;
 }
 
 function roundRect(
@@ -63,7 +68,8 @@ export function renderTextLayer(text: TextContent, width: number, height: number
   const fontSize = Math.max(8, text.fontSize);
   const lineHeight = fontSize * 1.28;
   const lines = text.content.split('\n');
-  ctx.font = `${fontSize}px "Microsoft YaHei", "PingFang SC", system-ui, sans-serif`;
+  // 粗体只在需要时拼进 font 串：字体族顺序不能动，否则中英文回退会变
+  ctx.font = `${text.bold === true ? 'bold ' : ''}${fontSize}px "Microsoft YaHei", "PingFang SC", system-ui, sans-serif`;
   ctx.textBaseline = 'middle';
   ctx.textAlign = text.align;
 
@@ -84,6 +90,24 @@ export function renderTextLayer(text: TextContent, width: number, height: number
     ctx.fillStyle = text.background;
     roundRect(ctx, boxLeft, firstY - lineHeight / 2 - padY, boxWidth, boxHeight, fontSize * 0.18);
     ctx.fill();
+  }
+
+  /**
+   * 描边：**先描后填**，`lineWidth = width * 2`。
+   *
+   * 若按 `lineWidth = width` 先描后填，填充会盖掉内侧一半，实际只剩 width/2 可见；
+   * 若先填后描，描边会压在字形上、字变粗且边缘发糊。
+   * `lineJoin: 'round'` 让中文的直角笔画拐弯不发毛刺。
+   */
+  const stroke = text.stroke;
+  if (stroke !== null && stroke !== undefined && stroke.width > 0) {
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.width * 2;
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+    lines.forEach((line, index) => {
+      ctx.strokeText(line, anchorX, firstY + index * lineHeight);
+    });
   }
 
   ctx.fillStyle = text.color;

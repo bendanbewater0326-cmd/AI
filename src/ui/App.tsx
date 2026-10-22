@@ -87,8 +87,18 @@ interface VeditorTestHooks {
     enabled: boolean;
     /** 只取画面 / 只取声音（分离音频后设置）。 */
     role: 'video' | 'audio' | null;
-    /** 文本片段的内容（非文本片段为 null）。 */
-    text: { content: string; fontSize: number; color: string; align: string } | null;
+    /** 文本片段的内容与样式（非文本片段为 null）。 */
+    text: {
+      content: string;
+      fontSize: number;
+      color: string;
+      align: string;
+      x: number;
+      y: number;
+      background: string;
+      bold: boolean;
+      stroke: { width: number; color: string } | null;
+    } | null;
     /** 生效中的效果类型（C 批：colorGrade）。 */
     effects: string[];
     /** 音量与淡化（C 批：R-037）。 */
@@ -1038,6 +1048,13 @@ export function App(): ReactElement {
                     fontSize: clip.text.fontSize,
                     color: clip.text.color,
                     align: clip.text.align,
+                    // 文本模板（左栏「文本」）验收要断言位置/底衬/粗体/描边，
+                    // **钩子字段裁剪过一次就再也读不到**（assets() 加 cacheKey 时踩过）
+                    x: clip.text.x,
+                    y: clip.text.y,
+                    background: clip.text.background,
+                    bold: clip.text.bold === true,
+                    stroke: clip.text.stroke ?? null,
                   },
             effects: clip.effects.map((effect) => effect.type),
             audio: {

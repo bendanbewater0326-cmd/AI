@@ -267,6 +267,18 @@ export interface TextContent {
   y: number;
   /** 半透明底衬，空串 = 无。 */
   background: string;
+  /**
+   * 粗体（缺省 = 不加粗）。
+   *
+   * **可选字段必须全链路归一化**：`normalizeText`（工程文件 / 宿主输入）漏了它，
+   * 就是"存盘再打开，粗体变回常规"——界面上完全看不出来，只有重开工程才会发现。
+   */
+  bold?: boolean;
+  /**
+   * 描边（缺省 = 无）。`width` 是**可见描边粗细**（项目像素），
+   * 实现上用 `lineWidth = width * 2` 先描后填，让外侧留 `width`。
+   */
+  stroke?: { width: number; color: string } | null;
 }
 
 export interface Clip {

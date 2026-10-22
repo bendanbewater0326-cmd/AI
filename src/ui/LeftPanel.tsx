@@ -32,6 +32,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { AssetPanel } from './AssetPanel';
+import { TextPanel } from './TextPanel';
 
 /** 9 个 Tab 的固定顺序（对齐 opencut-classic 的 TAB_KEYS，去掉我们不做的 adjustment 之外的项）。 */
 export const LEFT_TABS = [
@@ -246,7 +247,16 @@ export function LeftPanel(): ReactElement {
         <div className="v-tabpane__slot" hidden={active !== 'media'} data-v="asset-content-slot">
           <AssetPanel />
         </div>
-        {active === 'media' ? null : <TabPlaceholder label={current.label} hint={current.hint} />}
+        {/*
+          文本面板同样**常驻挂载**：切走再切回来，用户选中的分类还在
+          （卸载会把 `category` 重置成「全部」，属于"我明明选过字幕"的小挫败）。
+        */}
+        <div className="v-tabpane__slot" hidden={active !== 'text'} data-v="text-content-slot">
+          <TextPanel />
+        </div>
+        {active === 'media' || active === 'text' ? null : (
+          <TabPlaceholder label={current.label} hint={current.hint} />
+        )}
       </div>
     </aside>
   );

@@ -211,9 +211,16 @@ try {
   await page.session.waitFor('window.__VEDITOR_TEST__.clips().length > 0', 30000);
   await sleep(1200);
   now = await layout();
+  /**
+   * 比**百分比**而不是像素。
+   *
+   * 存进 localStorage 的是百分比（`veditor:timelinePct`），像素高度 = 百分比 × 当前工作区高。
+   * 刷新前后只要视口高度变了一点（实测：刷新瞬间出现过滚动条，innerHeight 少 15px），
+   * 同样的 28.2% 会算出差十几像素的结果 —— 断言像素就会偶发红，而功能其实是对的。
+   */
   report.check(
     `⑥b 刷新后高度保持（${pctOf(now).toFixed(1)}%，刷新前 ${pctOf(beforeReload).toFixed(1)}%）`,
-    Math.abs(now.timeline.h - beforeReload.timeline.h) <= 2,
+    Math.abs(pctOf(now) - pctOf(beforeReload)) <= 0.6,
   );
 
   // ---- ⑦ 业务逻辑零改动：片段数不变、预览仍 16:9 ----

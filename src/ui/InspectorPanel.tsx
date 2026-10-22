@@ -910,6 +910,56 @@ export function InspectorPanel(): ReactElement {
               <option value="right">右</option>
             </select>
           </div>
+          {/*
+            粗体 / 描边（2026-10-23 新增）。
+            必须给用户"能关掉"的入口：模板里有「金句描边」，套上去之后如果只能在
+            属性栏里改颜色、没法去描边，用户就只能换模板重来。
+          */}
+          <div className="v-inspector__group">
+            <label className="v-inspector__label" htmlFor="v-inspector-textbold">
+              <input
+                id="v-inspector-textbold"
+                data-v="inspector-textbold"
+                type="checkbox"
+                checked={clip.text.bold === true}
+                onChange={(event) => commitText({ bold: event.target.checked })}
+              />{' '}
+              加粗
+            </label>
+          </div>
+          <div className="v-inspector__group">
+            <label className="v-inspector__label" htmlFor="v-inspector-textstroke">
+              <input
+                id="v-inspector-textstroke"
+                data-v="inspector-textstroke"
+                type="checkbox"
+                checked={clip.text.stroke !== null && clip.text.stroke !== undefined}
+                onChange={(event) =>
+                  commitText({ stroke: event.target.checked ? { width: 6, color: '#000000' } : null })
+                }
+              />{' '}
+              描边
+            </label>
+            {clip.text.stroke !== null && clip.text.stroke !== undefined ? (
+              <input
+                className="v-inspector__control"
+                data-v="inspector-strokewidth"
+                type="number"
+                min={1}
+                max={40}
+                title="描边粗细（项目像素）"
+                value={clip.text.stroke.width}
+                onChange={(event) =>
+                  commitText({
+                    stroke: {
+                      width: Math.max(1, Math.min(40, Number(event.target.value) || 1)),
+                      color: (clip.text as TextContent).stroke?.color ?? '#000000',
+                    },
+                  })
+                }
+              />
+            ) : null}
+          </div>
         </>
       ) : null}
 

@@ -108,6 +108,7 @@ export function normalizeKeyframes(raw: unknown): Keyframe[] {
 function normalizeText(raw: unknown): TextContent | null {
   if (!isObject(raw)) return null;
   const align = raw['align'];
+  const strokeRaw = raw['stroke'];
   return {
     content: str(raw['content'], ''),
     fontSize: Math.max(1, int(raw['fontSize'], 72)),
@@ -116,6 +117,15 @@ function normalizeText(raw: unknown): TextContent | null {
     x: num(raw['x'], 0),
     y: num(raw['y'], 0),
     background: str(raw['background'], ''),
+    /**
+     * `bold` / `stroke` 是 2026-10-23 新增的可选字段。
+     * **必须显式归一化**：`createTextContent` 只写默认值，工程文件里丢了它
+     * 就等于"存盘再打开，描边/粗体没了"——从界面上完全看不出来（见 §9.4 同款教训）。
+     */
+    ...(raw['bold'] === true ? { bold: true } : {}),
+    ...(isObject(strokeRaw) && num(strokeRaw['width'], 0) > 0
+      ? { stroke: { width: Math.max(0, Math.min(40, num(strokeRaw['width'], 0))), color: str(strokeRaw['color'], '#000000') } }
+      : {}),
   };
 }
 

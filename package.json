@@ -8,7 +8,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "check": "node scripts/check-timebase.mjs && tsc --noEmit",
-    "test": "node tests/timebase.test.mjs && node tests/core.test.mjs && node tests/timeline-controller.test.mjs && node tests/timecode.test.mjs && node tests/clip-ops.test.mjs && node tests/audio.test.mjs && node tests/ai.test.mjs && node tests/transition.test.mjs && node tests/webm.test.mjs && node tests/cloud-llm.test.mjs && node tests/host-commands.test.mjs && node tests/zip.test.mjs && node tests/roughcut.test.mjs && node tests/proxy.test.mjs && node tests/project-file.test.mjs && node tests/preset.test.mjs && node tests/denoise.test.mjs && node tests/curve.test.mjs && node tests/subtitle.test.mjs && node tests/lut.test.mjs && node tests/mask.test.mjs && node tests/multicam.test.mjs && node tests/transcribe.test.mjs && node tests/placement.test.mjs && node tests/detach-audio.test.mjs && node tests/export-audio-mix.test.mjs && node tests/frame-transform.test.mjs && node tests/freeze.test.mjs && node tests/undo-merge.test.mjs && node tests/volume.test.mjs && node tests/track-layout.test.mjs && node tests/track-ops.test.mjs && node tests/relink.test.mjs && node tests/auto-restore.test.mjs && node tests/draft-cache.test.mjs",
+    "test": "node tests/timebase.test.mjs && node tests/core.test.mjs && node tests/timeline-controller.test.mjs && node tests/timecode.test.mjs && node tests/clip-ops.test.mjs && node tests/audio.test.mjs && node tests/ai.test.mjs && node tests/transition.test.mjs && node tests/webm.test.mjs && node tests/cloud-llm.test.mjs && node tests/host-commands.test.mjs && node tests/zip.test.mjs && node tests/roughcut.test.mjs && node tests/proxy.test.mjs && node tests/project-file.test.mjs && node tests/preset.test.mjs && node tests/denoise.test.mjs && node tests/curve.test.mjs && node tests/subtitle.test.mjs && node tests/lut.test.mjs && node tests/mask.test.mjs && node tests/multicam.test.mjs && node tests/transcribe.test.mjs && node tests/placement.test.mjs && node tests/detach-audio.test.mjs && node tests/export-audio-mix.test.mjs && node tests/frame-transform.test.mjs && node tests/freeze.test.mjs && node tests/undo-merge.test.mjs && node tests/volume.test.mjs && node tests/track-layout.test.mjs && node tests/track-ops.test.mjs && node tests/relink.test.mjs && node tests/auto-restore.test.mjs && node tests/draft-cache.test.mjs && node tests/text-presets.test.mjs",
     "e2e:ui": "node tests/verify-a-ui.mjs",
     "e2e:export": "node tests/verify-m3-export.mjs",
     "e2e:ai": "node tests/verify-m4-ai.mjs",
@@ -45,7 +45,8 @@
     "e2e:layout": "node tests/verify-layout.mjs",
     "e2e:timeline-height": "node tests/verify-timeline-height.mjs",
     "e2e:ctrlbar": "node tests/verify-ctrlbar-overlay.mjs",
-    "e2e:left-tabs": "node tests/verify-left-tabs.mjs"
+    "e2e:left-tabs": "node tests/verify-left-tabs.mjs",
+    "e2e:text-panel": "node tests/verify-text-panel.mjs"
   },
   "dependencies": {
     "gifenc": "^1.0.3",

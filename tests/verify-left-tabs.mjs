@@ -194,9 +194,13 @@ try {
   report.check('④c 占位**可见**（不是只存在于 DOM）', (await visible('[data-v="tab-placeholder"]')) === true);
   report.check('④d 素材面板已隐藏（不占位、不可点）', (await visible('[data-v="asset-empty"]')) === false && (await visible('[data-v="asset-card"]')) === false);
 
-  // ---- ⑤ 8 个未实现 Tab 逐个点：都要给出对应的中文提示 ----
+  // ---- ⑤ 未实现的 Tab 逐个点：都要给出对应的中文提示 ----
+  /**
+   * 「文本」已经换成真面板（2026-10-23 文本模板库），不再走占位 —— 它单独验（⑤b）。
+   * 每做完一个 Tab 就把这里减一个，别让"占位列表"和实际实现脱节。
+   */
   const placeholders = [];
-  for (const [key, label] of EXPECTED.slice(1)) {
+  for (const [key, label] of EXPECTED.slice(1).filter(([tabKey]) => tabKey !== 'text')) {
     await click(`[data-v="left-tab-${key}"]`);
     const text = await page.session.evaluate(
       'document.querySelector(\'[data-v="tab-placeholder-title"]\')?.textContent || ""',
@@ -204,8 +208,26 @@ try {
     placeholders.push(`${label}:${String(text).trim() === `${label}功能开发中` ? '✓' : `✗(${text})`}`);
   }
   report.check(
-    `⑤ 8 个未实现 Tab 各自给出「功能开发中」（${placeholders.join(' ')}）`,
+    `⑤ 7 个未实现 Tab 各自给出「功能开发中」（${placeholders.join(' ')}）`,
     placeholders.every((item) => item.endsWith('✓')),
+  );
+
+  // ---- ⑤b「文本」是已实现的面板：没有占位、有模板卡片 ----
+  await click('[data-v="left-tab-text"]');
+  const textPanel = JSON.parse(
+    await page.session.evaluate(`(() => {
+      const panel = document.querySelector('[data-v="text-panel"]');
+      const rect = panel ? panel.getBoundingClientRect() : null;
+      return JSON.stringify({
+        visible: panel !== null && panel.closest('[hidden]') === null && (rect?.width ?? 0) > 0,
+        cards: document.querySelectorAll('[data-v="text-preset"]').length,
+        placeholder: document.querySelector('[data-v="tab-placeholder"]') !== null,
+      });
+    })()`),
+  );
+  report.check(
+    `⑤b 「文本」Tab 显示模板库（${textPanel.cards} 个模板，无占位）`,
+    textPanel.visible === true && textPanel.cards === 10 && textPanel.placeholder === false,
   );
 
   // ---- ⑥ 切回「素材」：面板回来且素材不丢 ----
