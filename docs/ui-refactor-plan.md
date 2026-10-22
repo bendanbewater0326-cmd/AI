@@ -193,7 +193,7 @@ verify-touch-a11y.mjs      # 断言"时间线可视区在视口内"
 
 **验收**：`verify-t11` 的"顶栏高度 24–64"（实测 48）+ 全量 54/54 全绿 ✅
 
-### S1.2 三栏改百分比 + 可拖拽 + 可折叠
+### S1.2 三栏改百分比 + 可拖拽 + 可折叠（✅ 已完成 2026-10-22）
 
 - 新增 `ui/splitter.tsx`（一个 4px 的拖拽条，复用 S3 的 pointer 拖拽模式）
 - `v-body` 的列宽改成 `calc(var(--v-left-pct) * 1%)` 之类，或直接内联 style
@@ -201,6 +201,35 @@ verify-touch-a11y.mjs      # 断言"时间线可视区在视口内"
 - 记住宽度/折叠状态（localStorage，不进工程文件）
 
 **验收**：拖到 15% / 40% 边界会停住；折叠后预览变宽；刷新后状态保留。
+
+**已完成的部分**：
+
+1. `ui/splitter.tsx`：`PANEL_MIN_PCT=15` / `PANEL_MAX_PCT=40` / `PANEL_DEFAULT_PCT=25`；
+   `readStoredPct` / `readStoredCollapsed` / `storePct` / `storeCollapsed`；
+   `applyPanelWidth(side, pct, collapsed)` 写根节点 `--v-left-w` / `--v-right-w`；
+   `currentPanelPct(side)` 读回实际值。
+2. 拖拽**不 setState**：`pointermove` 里直接改 CSS 变量（React 只负责折叠态图标），
+   松手才写 localStorage。挂 `window` 而不是元素自身（4px 细线一离开就收不到 move）。
+3. 折叠：面板 `display: none` + 列宽写 `0px`；按钮贴在分隔条**顶部**（`top: 8px`），
+   折叠态常显（否则面板 0 宽后没有任何可点的东西能拉回来）。
+4. `v-body` 5 列 grid；**5 个子项全部显式指定 `grid-column`**（见下方"踩坑"）。
+5. `uiLayout().vars` 里 `railW` 换成 `leftW` / `rightW` / `splitterW`。
+6. 媒体查询：≤1024px → 20%，≤820px → 16%（百分比变量覆盖，不是改 grid）。
+
+**两个实测踩到的坑**（都写进了 CSS 注释，别再踩）：
+
+| 坑 | 症状 | 原因 / 修法 |
+|---|---|---|
+| 折叠按钮盖住分隔条 | 拖拽完全没反应，只有折叠生效 | 4px 的条上放 12px 宽的按钮并居中 → 整条都是按钮。按钮移到 `top: 8px` |
+| 折叠后预览宽度变 **4px** | 折叠左栏后 `stage.w` 从 842 变成 4，右栏被压成一条线 | 面板 `display: none` 后脱离 grid 流，剩下 4 项**自动放置往前挤一格**：预览落到了第 2 列（4px 分隔条列）。给 5 个子项全部写死 `grid-column` |
+
+第二个坑尤其阴：**折叠右栏时看不出来**（只是尾部少一项，前面列号不变），
+所以"折叠右栏 → 预览变宽"的断言会通过，只有折叠左栏才暴露。这类
+"一个方向对、另一个方向错"的布局问题必须两个方向都测。
+
+**验收**：`tests/verify-layout.mjs` 15 项全绿（默认 25/50/25、拖左/拖右、clamp 40%/15%、
+折叠左/右、展开恢复上次宽度、刷新记忆、不重叠不越界、重绘 3.4ms）；全量 E2E 55/55 ✅
+
 
 ### S1.3 左栏图标 Tab 条（9 个，先只有"素材"有内容）
 

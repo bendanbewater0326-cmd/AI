@@ -47,6 +47,7 @@ import type { AIProvider } from '../ai/provider';
 import { AssetPanel, MemoryModeBanner } from './AssetPanel';
 import { CommandBar } from './CommandBar';
 import { InspectorPanel } from './InspectorPanel';
+import { Splitter, applyPanelWidth, hasStoredPct, readStoredCollapsed, readStoredPct, storeCollapsed, storePct } from './splitter';
 import { Toast } from './Toast';
 import type { ToastPayload } from './Toast';
 import { TimelineView } from './TimelineView';
@@ -574,6 +575,42 @@ export function App(): ReactElement {
    * 再被自动恢复链回来。没有这个闸门，用户会看到离线条闪一下又消失。
    */
   const [autoRestoreDone, setAutoRestoreDone] = useState(true);
+  /**
+   * 三栏的可拖拽宽度与折叠态（S1.2）。
+   *
+   * 宽度**不进 React state**：拖拽时每秒 60+ 次 `pointermove`，每次 setState 都会让
+   * 整个 App（含时间线/预览）重渲染，拖动会发涩。宽度只改根节点的 CSS 变量，
+   * 浏览器自己重排；React 只负责折叠态的图标。
+   *
+   * 默认 25% / 50% / 25%（对齐 opencut-classic 的 PANEL_CONFIG）。
+   */
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [collapsed, setCollapsed] = useState(() => ({
+    left: readStoredCollapsed('left'),
+    right: readStoredCollapsed('right'),
+  }));
+
+  // 启动时把记住的宽度/折叠态写到 CSS 变量（否则刷新后回到默认 25%）
+  useEffect(() => {
+    for (const side of ['left', 'right'] as const) {
+      if (readStoredCollapsed(side)) {
+        applyPanelWidth(side, 0, true);
+      } else if (hasStoredPct(side)) {
+        // **只在拖过时才写行内值**：否则会盖掉媒体查询（窄屏 20% / 16% 收窄失效）
+        applyPanelWidth(side, readStoredPct(side), false);
+      }
+    }
+  }, []);
+
+  function togglePanel(side: 'left' | 'right'): void {
+    setCollapsed((previous) => {
+      const next = !previous[side];
+      // 展开时回到"上次拖到的宽度"（不是回到 25%）
+      applyPanelWidth(side, readStoredPct(side), next);
+      storeCollapsed(side, next);
+      return { ...previous, [side]: next };
+    });
+  }
   /** 屏幕阅读器播报文本（R-064）：只在播放头/选中变化后 400ms 更新一次。 */
   const [a11yStatus, setA11yStatus] = useState('');
   const frame = useFrame();
@@ -1040,7 +1077,9 @@ export function App(): ReactElement {
           previewCanvas: box('[data-v="preview-canvas"]'),
           vars: {
             topbarH: readVar('--v-topbar-h'),
-            railW: readVar('--v-rail-w'),
+            leftW: readVar('--v-left-w'),
+            rightW: readVar('--v-right-w'),
+            splitterW: readVar('--v-splitter-w'),
             ctrlbarH: readVar('--v-ctrlbar-h'),
             timelineH: readVar('--v-timeline-h'),
           },
@@ -1220,8 +1259,20 @@ export function App(): ReactElement {
       <TopBar buildId={buildId} />
       <div className="v-workspace">
         <ErrorBar />
-        <div className="v-body">
+        <div
+          className="v-body"
+          ref={bodyRef}
+          data-left-collapsed={collapsed.left}
+          data-right-collapsed={collapsed.right}
+        >
           <AssetPanel />
+          <Splitter
+            side="left"
+            collapsed={collapsed.left}
+            onToggleCollapse={() => togglePanel('left')}
+            onResizeEnd={(pct) => storePct('left', pct)}
+            containerRef={bodyRef}
+          />
           <PreviewStage
             playing={playing}
             onToggle={() => transport.toggle()}
@@ -1235,6 +1286,13 @@ export function App(): ReactElement {
               audioRef.current?.setMasterVolume(gain);
             }}
             canvasRef={previewCanvasRef}
+          />
+          <Splitter
+            side="right"
+            collapsed={collapsed.right}
+            onToggleCollapse={() => togglePanel('right')}
+            onResizeEnd={(pct) => storePct('right', pct)}
+            containerRef={bodyRef}
           />
           <InspectorPanel />
         </div>
