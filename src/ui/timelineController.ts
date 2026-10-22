@@ -19,11 +19,7 @@
  * 裁剪的素材帧跨度 → 项目帧时长用 `projectSpanFrames`；裁剪左边缘改 `inFrame` 后的
  * 新 `startFrame` 用 `assetFrameToProjectFrame`（half-up，仅裁剪/建片段时合法）。
  */
-import {
-  MAX_ZOOM_LEVEL,
-  MIN_ZOOM_LEVEL,
-  trackDisplayOrder,
-} from '../core/types';
+import { MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL } from '../core/types';
 import type {
   Clip,
   ClipOperation,
@@ -473,10 +469,18 @@ export function createTimelineController(deps: TimelineControllerDeps) {
     drag.deltaFrames = deltaFrames;
 
     if (drag.kind === 'move') {
-      // 计算目标轨道（拖到别的轨）：y 与绘制共用 trackDisplayOrder，否则多轨时必错位
-      const hitTrackIndex = Math.floor((y - 24) / 56);
-      const targetTrack = trackDisplayOrder(doc.tracks)[hitTrackIndex];
-      const targetTrackId = targetTrack?.id ?? drag.fromTrackId;
+      /**
+       * 计算目标轨道（拖到别的轨）。
+       *
+       * **必须查 `trackLayout`**，不能自己算 `floor((y - ruler) / 行高)`。
+       * 旧实现写的是 `floor((y - 24) / 56)` —— 而 S3 之后轨道高度是
+       * 视频 60 / 音频 50 / 字幕 32，且**用户可以拖高到 120**。
+       * 实测：把 V2 拖高到 120 之后，从 V1 往 V3 拖会算出第 4 行（不存在），
+       * 于是 fallback 回原轨 —— 表现是"**跨轨拖拽完全没反应**"，
+       * 而且因为 fallback 恰好等于原轨，看起来像"拖了但没动"，极难归因。
+       */
+      const rowNow = trackRowAtY(trackLayout(doc), y);
+      const targetTrackId = rowNow?.trackId ?? drag.fromTrackId;
 
       // 吸附（移动时吸附片段起始位置）
       const candidates = collectSnapCandidates(doc, clip.id);
@@ -598,7 +602,3 @@ function findClip(doc: Project, clipId: string): Clip | undefined {
   return undefined;
 }
 
-/** 布局常量（与 painter / app.css 对齐；导出供 TimelineView 复用）。 */
-export const TIMELINE_RULER_HEIGHT = 24;
-export const TIMELINE_TRACK_HEIGHT = 56;
-export const TIMELINE_TRACK_HEADER_WIDTH = 56;

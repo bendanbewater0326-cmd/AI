@@ -194,6 +194,13 @@ interface VeditorTestHooks {
   pause: () => void;
   /** 当前选中片段（null = 未选中）。交互类 E2E 用它判断点到了没有，比看属性栏 disabled 可靠。 */
   selection: () => string | null;
+  /**
+   * **全部**选中片段（主选 + 加选）。
+   *
+   * `selection()` 只返回主选 —— 多选是"主选 + 若干次选"，只测主选会漏掉
+   * "Ctrl 点击后到底有没有真的多选一个"。
+   */
+  selectionAll: () => string[];
   /** 把播放头移到指定帧（自检/诊断用；走真实 transport，和用户点标尺等价）。 */
   seek: (frame: number) => void;
   /** 已排期 PCM 的波形统计（诊断"声音失真"：看削顶与峰值）。 */
@@ -1025,6 +1032,7 @@ export function App(): ReactElement {
         return result.ok ? 'ok' : result.error.message;
       },
       selection: () => store.getEphemeral().selectedClipId ?? null,
+      selectionAll: () => store.getSelection(),
       seek: (frame: number) => {
         transportRef.current.seekTo(frame, 'exact');
       },
