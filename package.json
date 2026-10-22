@@ -42,7 +42,8 @@
     "e2e:cache": "node tests/verify-draft-cache.mjs",
     "e2e:clip-states": "node tests/verify-clip-states.mjs",
     "e2e:s5-p0": "node tests/verify-s5-p0.mjs",
-    "e2e:layout": "node tests/verify-layout.mjs"
+    "e2e:layout": "node tests/verify-layout.mjs",
+    "e2e:left-tabs": "node tests/verify-left-tabs.mjs"
   },
   "dependencies": {
     "gifenc": "^1.0.3",

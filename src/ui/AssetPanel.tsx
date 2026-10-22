@@ -1,6 +1,8 @@
 /**
- * 左素材栏（T12 / R-002/003/004/005/014）：
+ * 左栏「素材」Tab 的内容（T12 / R-002/003/004/005/014）：
  * 拖放导入（全窗口）、90×51 首帧缩略图、去重、双击上轨、离线重链接、内存模式常驻警告。
+ *
+ * S1.3 起外层的 44px 图标条由 `ui/LeftPanel` 提供，这里只负责内容区（不再自己当 grid 子项）。
  *
  * 关键约定：
  *   1. `dragover` 必须 `preventDefault()`，否则浏览器会用文件替换整个页面（最常见失误）；
@@ -560,7 +562,7 @@ export function AssetPanel(): ReactElement {
   }, []);
 
   return (
-    <aside className="v-rail v-rail--left" data-v="asset-panel" aria-label="素材栏">
+    <div className="v-assetpane" data-v="asset-content" aria-label="素材栏">
       <input
         ref={relinkInputRef}
         type="file"
@@ -761,7 +763,7 @@ export function AssetPanel(): ReactElement {
         </div>
       ) : null}
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
-    </aside>
+    </div>
   );
 }
 

@@ -80,18 +80,20 @@
 
 ## 附：合入主分支前需要确认的两件事
 
-### A. 这个目录当前**不是 git 仓库**
+### A. 仓库已在本地初始化（原记录"不是 git 仓库"已过期）
 
 ```
 $ git rev-parse --is-inside-work-tree
-fatal: not a git repository
+true
 ```
 
-`.gitignore` 已经写好了（`node_modules/`、`dist/`、`tests/.tmp/`、`tests/.cache/`、`*.log`），
-但仓库本身没初始化。合入前需要二选一：
-
-- **接上已有远端**：`git init` → `git remote add origin <url>` → `git fetch` → 对齐分支；
-- **本地新建**：`git init` → 首次提交。
+- 2026-10-22 已 `git init`，当前 `main` 分支 **9 个提交**，工作区干净；
+- 提交身份写在本仓库 local config（`user.name=veditor` / `user.email=dev@veditor.local`），
+  **不是** `--global`；
+- `.gitattributes` 统一 `eol=lf`（此前一半文件是 CRLF，跨平台会出现"整文件被改动"的假 diff）；
+- **远端已配置但尚未推送成功**：`origin = https://github.com/bendanbewater0326-cmd/AI.git`。
+  本机到 GitHub 的网络被代理拦（`CONNECT tunnel failed, response 502`），
+  网络恢复后直接 `git push -u origin main` 即可，不需要再 `remote add`。
 
 ### B. `tests/fixtures/` 有 **188 MB** 的测试素材
 

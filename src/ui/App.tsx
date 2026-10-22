@@ -44,9 +44,10 @@ import { cacheStats, currentBackend, isCacheAvailable, pendingCacheJobs } from '
 import { unregisterPreviewSource } from '../media/previewSource';
 import { getAIProvider, setAIProvider } from '../ai/registry';
 import type { AIProvider } from '../ai/provider';
-import { AssetPanel, MemoryModeBanner } from './AssetPanel';
+import { MemoryModeBanner } from './AssetPanel';
 import { CommandBar } from './CommandBar';
 import { InspectorPanel } from './InspectorPanel';
+import { LeftPanel, getActiveLeftTab } from './LeftPanel';
 import { Splitter, applyPanelWidth, hasStoredPct, readStoredCollapsed, readStoredPct, storeCollapsed, storePct } from './splitter';
 import { Toast } from './Toast';
 import type { ToastPayload } from './Toast';
@@ -169,6 +170,9 @@ interface VeditorTestHooks {
     window: { w: number; h: number };
     topbar: Box | null;
     left: Box | null;
+    /** 左栏内部的 44px 图标条与 Tab 内容区（S1.3：图标条算在 25% 之内）。 */
+    leftRail: Box | null;
+    leftContent: Box | null;
     right: Box | null;
     stage: Box | null;
     ctrlbar: Box | null;
@@ -179,6 +183,8 @@ interface VeditorTestHooks {
     /** 布局用的 CSS 变量当前值（px 或 %）。 */
     vars: Record<string, string>;
   };
+  /** 左栏当前激活的 Tab（`media` / `audio` / … / `settings`），S1.3 验收用。 */
+  leftTab: () => string;
   /** 时间线几何（E2E 坐标换算的唯一来源，别再硬编码 56/24）。 */
   timelineLayout: () => {
     headerWidth: number;
@@ -1068,6 +1074,8 @@ export function App(): ReactElement {
           window: { w: window.innerWidth, h: window.innerHeight },
           topbar: box('[data-v="topbar"]'),
           left: box('[data-v="asset-panel"]'),
+          leftRail: box('[data-v="left-tabbar"]'),
+          leftContent: box('[data-v="left-content"]'),
           right: box('[data-v="inspector-panel"]'),
           stage: box('[data-v="stage"]'),
           ctrlbar: box('[data-v="ctrlbar"]'),
@@ -1089,6 +1097,8 @@ export function App(): ReactElement {
         const layout = trackLayout(store.getDoc());
         return { headerWidth: layout.headerWidth, rulerHeight: layout.rulerHeight, rows: layout.rows, totalHeight: layout.totalHeight };
       },
+      /** 左栏激活的 Tab（S1.3：9 个 Tab 的切换与记忆）。 */
+      leftTab: () => getActiveLeftTab(),
       // 选中片段（测试用：默认 zoom 下多片段工程后半段不可见，坐标点击不可靠）
       selectClip: (clipId: string) => store.setSelectedClipId(clipId),
       /** 改轨道标志（隐藏/静音/锁定/独奏）—— 与按钮、右键菜单走**同一个** store 方法。 */
@@ -1265,7 +1275,7 @@ export function App(): ReactElement {
           data-left-collapsed={collapsed.left}
           data-right-collapsed={collapsed.right}
         >
-          <AssetPanel />
+          <LeftPanel />
           <Splitter
             side="left"
             collapsed={collapsed.left}

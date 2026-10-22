@@ -49,11 +49,11 @@
 | 任务进度 | **T01–T19 全部完成** | 架构 §任务表 |
 | 里程碑 | M1 能跑 / M2 能剪 / M3 导出 / M4 AI / **M5-M6（P2）13/13 全部交付** | — |
 | 批次增强 | A（音频·导出·UI）/ B（M4 AI）/ C1（文字·调色·音量）/ C2（转场·入出点）/ C3（变速·关键帧·剪贴板）全部交付 | — |
-| 源码 | **82 个 ts/tsx**（+ `app.css` = 83 文件 / 33100 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
+| 源码 | **83 个 ts/tsx**（+ `app.css` = 84 文件 / 33540 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
 | 单测 | **576 条 / 35 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
-| E2E | **55 个 `verify-*.mjs`**（54 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建产物 | `dist/main.js` **635.7KB**（esbuild 单包） | `npm run build` |
-| 时基静态检查 | **扫描 83 个文件，0 处非法换算** | `npm run check` |
+| E2E | **56 个 `verify-*.mjs`**（55 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建产物 | `dist/main.js` **640.6KB**（esbuild 单包） | `npm run build` |
+| 时基静态检查 | **扫描 84 个文件，0 处非法换算** | `npm run check` |
 
 > 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存。
 > 文件数把上面管道的 `xargs wc -l | tail -1` 换成 `wc -l` 即可。
@@ -1814,6 +1814,53 @@ S1.0 的钩子、S1.1 的顶栏都只是"不挡路"。这一轮才是真正把�
 
 ---
 
+### 3.28 2026-10-22 · UI 重构 S1.3：左栏 44px 图标条 + 9 个中文 Tab
+
+**用户拍板**：图标条**算在 25% 之内**（A 方案，与 opencut-classic 的 `tabbar` 一致），
+不是"25% + 44px"。
+
+```
+┌──────────────────── 25%（354px @1440）────────────────────┐
+│ 44px │ 内容区（309px）                                     │
+│ 素材 │                                                      │
+│ 音频 │  素材面板 / 「功能开发中」占位                        │
+│ …    │                                                      │
+└────────────────────────────────────────────────────────────┘
+```
+
+**产出**：`src/ui/LeftPanel.tsx`（新）+ `AssetPanel` 降级为内容区 + CSS。
+
+- 9 个 Tab 固定顺序：**素材 / 音频 / 文本 / 贴纸 / 特效 / 转场 / 字幕 / 调节 / 设置**，
+  图标 16px 线性 + 11px 中文名竖排（只用图标的话"特效/转场/字幕/调节"四个在 16px 下分不清）。
+- 未实现的 8 个 Tab **不加 `disabled`**（用户明确要求），点进去显示「XX功能开发中」+
+  一句"当前版本请先在「素材」里导入文件"。占位文案刻意写成"将来有什么 + 现在怎么办"。
+- 激活态用浅底 + 主色字（44px 宽里画左侧色条会贴到图标边缘，看起来像没对齐）。
+- `title` / `aria-label` 全为中文；用 `aria-current` 而不是 `aria-selected`
+  （这组按钮没有实现方向键切换，别用 tablist 语义骗读屏）。
+
+**素材面板常驻挂载**，非激活时 `hidden`。卸载会丢三样东西：
+正在进行的导入（`importing` 是 ref）、已解析缩略图（`thumbs` 是 state）、
+隐藏的 `<input type=file>`（重链流程 `ref.click()` 会静默失效）。
+
+**两个必须知道的坑**：
+
+1. `[hidden]` 的浏览器默认样式是 `display: none`，但 `.v-tabpane__slot { display: flex }`
+   优先级更高会把它盖掉 —— 必须显式写 `.v-tabpane__slot[hidden] { display: none }`，
+   否则"隐藏"的面板照样占位、照样能点到。
+2. 820px 窄屏下左栏 16% ≈ 131px，减去 44px 只剩 87px，90px 卡片会被 `overflow-x: hidden`
+   裁掉右边缘（看起来像"缩略图坏了"）。所以图标条同步收到 40px、缩略图收到 64px。
+
+**验证**：`tests/verify-left-tabs.mjs` 22 项全绿，关键是这两条把"算在 25% 内"钉死：
+
+```
+② 图标条 44px · ②b 贴在左栏最左侧 · ②c 内容区 309 = 354 − 44（间隙 0）
+②d 图标条 + 内容区 = 左栏宽（没有把 44px 加到 25% 之外）
+```
+
+**数字**：E2E 56 个、构建 640.6KB（+4.9KB）。
+
+---
+
 ## 4. 技术栈
 
 | 层 | 技术 |
@@ -1850,10 +1897,10 @@ src/
               (探测→资产→注册预览源→缩略图，两条导入入口共用), silence, proxy, denoise
   render/     compositor(WebGL2+2D降级), timelinePainter, textLayer,
               curve, lut, mask, frameTransform(旋转/翻转的纯函数)
-  ui/         App, TopBar, AssetPanel, TimelineView, InspectorPanel,
-              CommandBar, ExportDialog, Toast, ContextMenu(自绘右键菜单),
-              SelfCheck(应用内自检), timelineController, theme,
-              splitter(三栏拖拽/折叠), CacheDialog(缓存池管理)
+  ui/         App, TopBar, LeftPanel(左栏 44px 图标条 + 9 Tab), AssetPanel(素材 Tab 内容),
+              TimelineView, InspectorPanel, CommandBar, ExportDialog, Toast,
+              ContextMenu(自绘右键菜单), SelfCheck(应用内自检), timelineController,
+              theme, splitter(三栏拖拽/折叠), CacheDialog(缓存池管理)
   host/       host(挂载入口：?src= / veditor-panel / postMessage),
               commands(命令分发), projectInput(工程归一化)
   ai/         context, intents, provider, registry, tone, cloudLLM,
@@ -1884,7 +1931,7 @@ npm test         # 576 条单测（35 个 .test.mjs，Node 直接跑）
 npm run check    # 类型检查 + 时基静态扫描
 npm run build    # 生产构建（esbuild）
 npm run dev      # 开发服务器（默认 5173，PORT=xxxx 可改）
-npm run e2e      # **全量 E2E**（55 个脚本串行，约 15 分钟，汇总 + 失败清单；无头浏览器，不弹窗）
+npm run e2e      # **全量 E2E**（56 个脚本串行，约 15 分钟，汇总 + 失败清单；无头浏览器，不弹窗）
 npm run e2e:list # 只列清单（不跑）
 # 两个 4K 脚本（realworld / proxy）失败时**自动重试一次**，成功会打「（重试后通过）」。
 # 原因：4K 解码吃显存，机器上还有用户自己的浏览器在跑 → 单跑必过、连跑偶红。
@@ -1892,7 +1939,7 @@ npm run e2e:list # 只列清单（不跑）
 node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头浏览器）
 ```
 
-> 有 31 个 E2E 配了 npm 别名：`e2e:ui`（a-ui）/ `e2e:export`（m3）/ `e2e:ai`（m4）/ `e2e:c1`（c-ui）/ `e2e:c2`（c2-ui）/ `e2e:host`（postmessage）/ `e2e:png`（png-export）/ `e2e:roughcut`（roughcut）/ `e2e:proxy`（proxy）/ `e2e:project`（project-file）/ `e2e:preset`（preset）/ `e2e:touch`（touch-a11y）/ `e2e:denoise`（denoise）/ `e2e:curve`（curve）/ `e2e:lut`（lut）/ `e2e:mask`（mask）/ `e2e:multicam`（multicam）/ `e2e:transcribe`（transcribe）。
+> 有 33 个 E2E 配了 npm 别名：`e2e:ui`（a-ui）/ `e2e:export`（m3）/ `e2e:ai`（m4）/ `e2e:c1`（c-ui）/ `e2e:c2`（c2-ui）/ `e2e:host`（postmessage）/ `e2e:png`（png-export）/ `e2e:roughcut`（roughcut）/ `e2e:proxy`（proxy）/ `e2e:project`（project-file）/ `e2e:preset`（preset）/ `e2e:touch`（touch-a11y）/ `e2e:denoise`（denoise）/ `e2e:curve`（curve）/ `e2e:lut`（lut）/ `e2e:mask`（mask）/ `e2e:multicam`（multicam）/ `e2e:transcribe`（transcribe）/ `e2e:layout`（layout）/ `e2e:left-tabs`（left-tabs）。
 > 其余直接用 `node tests/verify-xxx.mjs`。
 
 ### 单测脚本（`tests/*.test.mjs`，35 个 / 576 条）
@@ -1936,7 +1983,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `draft-cache` | 草稿缓存池（指纹去重 / 并发 2 / 清理未使用） | 11 |
 | **合计** | | **576** |
 
-### E2E 脚本（`tests/verify-*.mjs`，55 个）
+### E2E 脚本（`tests/verify-*.mjs`，56 个）
 
 | 脚本 | 覆盖 |
 |---|---|
@@ -1973,6 +2020,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `clip-states` | **S4 片段四态**：全部读画布像素（悬停提亮 / 选中描边与把手 / 锁定蒙层与角标 / 优先级 锁定>选中>悬停） |
 | `s5-p0` | **S5 P0**：裁剪吸附（拖与松手同一函数）/ Ctrl 加选 / 多选批量删除一步撤销 / 拖出轨道区回弹并提示 |
 | `layout` | **S1.2 三栏**：默认 25/50/25、拖拽 clamp 15%–40%、左右折叠、刷新记忆、窄屏 16%（**必须真刷新**才测得到挂载逻辑） |
+| `left-tabs` | **S1.3 左栏**：44px 图标条**算在 25% 之内**（内容区 = 左栏 − 44）、9 个中文 Tab 顺序与 title、未实现 Tab 可点且给「功能开发中」、切走再回来素材不丢、刷新记住 Tab、折叠后图标条一起归零、820px 同步收窄 |
 | `audio-controls` | 音量滑块立即生效（不用等松手）+ 轨道闸门真的到了音频链路 |
 | `audio-menu` | 右键音频菜单 7 项，导出产物用 `Browser.setDownloadBehavior` 落盘校验文件头 |
 | `transform` | 旋转 90° / 水平垂直翻转 / 定格 / 倒放 |
@@ -2489,6 +2537,13 @@ D:/项目专用文件夹/剪辑工具/
 - **并发 renderFrame 共享池缓存会互相淘汰**：必须串行化 + 合并中间请求。
 - **`destroy()` 只卸载 React root**：transport 的 rAF、AudioContext 都在 useEffect cleanup 里，
   模块级单例（引擎/池）不随组件销毁。
+- **`hidden` 属性会被自己的 `display` 盖掉**：`[hidden]` 的浏览器默认样式是
+  `display: none`，但类选择器 `.v-tabpane__slot { display: flex }` 优先级更高 ——
+  "隐藏"的元素照样占位、照样能点到。凡是用 `hidden` 藏 flex/grid 容器，
+  **必须显式补 `[hidden] { display: none }`**。
+- **"算在里面"还是"加在外面"必须用像素断言**：S1.3 的 44px 图标条如果写成
+  "25% + 44px"，1440 下只多占 3%，肉眼完全看不出，但中间预览区被永久挤压。
+  正确断言是 `内容区宽 = 左栏宽 − 44`（差值 0），不是"图标条宽 44"。
 - **规格的每个数学公式都要有反例用例**：证明它不能被等价替换（时基 13.5% 相位错的教训）。
 - **生死线断言必须有独立验证路径**（不共享代码）：如用 BigInt 独立实现 spec 公式做对拍。
 
@@ -2508,9 +2563,22 @@ D:/项目专用文件夹/剪辑工具/
 | `docs/hardline-test-spec.md` | 四条生死线测试规格 |
 | `docs/progress-review-2026-10-20.md` | **体检报告 + 批次 A/B/C1/C2 交付记录**（最重要的一份复盘） |
 | `docs/tech-preflight.md` | WebCodecs 能力实测 |
-| `.workbuddy/memory/2026-10-18.md` | 立项日志（需求对齐、时基 bug 始末） |
-| `.workbuddy/memory/2026-10-20.md` | 主开发日志（T05–T18 + 批次 A/B） |
-| `.workbuddy/memory/2026-10-21.md` | C3/T19/真实素材排查日志（最详细踩坑） |
+| `docs/nle-baseline.md` | **加剪辑功能前先查**：剪映/PR 怎么做、我们有什么偏离 |
+| `docs/product-plan.md` | 产品与技术顾问方案（对标 OpenCut/MLT/MoviePy，含三个前提纠正） |
+| `docs/ux-plan.md` | 交互与功能补全方案（左侧 7 Tab / 时间轴 / 属性栏 / 文本音频转场 / AI 抽屉） |
+| `docs/timeline-spec.md` | **时间轴模块落地规范**（剪映式轨道头/四态/转场点/右键菜单/Agent JSON） |
+| `docs/ui-refactor-plan.md` | **UI 重构线**（S1.0–S1.5 五步，对标 opencut-classic） |
+| `docs/s1-s2-delivery.md` | S1 几何收敛 + S2 轨道头的交付记录 |
+| `docs/s5-audit.md` | S5 摸底：13 项探针实测的"已具备 / 缺口"清单 |
+| `docs/backlog.md` | **已确认但排在后续的优化项**（缓存队列持久化 / 配额显示 / 工程打包） |
+| `.workbuddy-ai/memory/2026-10-18.md` | 立项日志（需求对齐、时基 bug 始末） |
+| `.workbuddy-ai/memory/2026-10-20.md` | 主开发日志（T05–T18 + 批次 A/B） |
+| `.workbuddy-ai/memory/2026-10-21.md` | C3/T19/真实素材排查日志（最详细踩坑） |
+| `.workbuddy-ai/memory/2026-10-22.md` | 顾问方案 / S1–S5 / UI 重构 / 缓存池 / 全量体检（**最新**） |
+| `.workbuddy-ai/memory/MEMORY.md` | 跨会话铁律速查（预览服务起法 / 缓存池原则 / 测试坐标 / 常见系统性风险） |
+
+> 记忆目录已从 `.workbuddy/memory/` 迁到 **`.workbuddy-ai/memory/`**（前者已 gitignore 且停更）。
+> `docs/` 下 8 份 10-22 新写的方案文档此前没进这张表，S1.3 时一并补上。
 
 ---
 
@@ -2562,11 +2630,12 @@ D:/项目专用文件夹/剪辑工具/
 | **2026-10-22（S5 摸底 + P0 四项）** | 裁剪吸附 / Ctrl 加选 / 多选删除 / 拖出界提示 | 先出「已具备能力 + 待补全缺口」清单（`docs/s5-audit.md`）；抽 `resolveTrimSnapped` 让拖动与松手**走同一函数**（否则"吸上了又跳回去"）；`drag.invalidReason` 区分"轨道区外"与"视频拖音轨"；10 项 E2E |
 | **2026-10-22（UI 重构 S1.0 + S1.1）** | 布局钩子 + 顶栏 48px | 对标 opencut-classic web 编辑器；新增 `uiLayout()` 钩子，`verify-t11` 的 5 条硬编码尺寸断言改成 8 条结构性断言（范围同时容纳 110px 与 25%）；顶栏加撤销/重做/分割，主题/缓存/构建时间收进「工程」下拉 |
 | **2026-10-22（UI 重构 S1.2）** | 三栏百分比 + 拖拽 + 折叠 | 25/50/25 + 4px 分隔条（15%–40% clamp）+ 左右一键折叠 + localStorage 记忆；**三个 E2E 抓出来的真 bug**：折叠按钮盖住分隔条、折叠左栏后预览变 4px（grid 自动放置挤位）、窄屏媒体查询被行内样式盖成死代码；16 项 E2E（`verify-layout`），全量 55/55 |
+| **2026-10-22（UI 重构 S1.3）** | 左栏 44px 图标条 + 9 个中文 Tab | 图标条**算在 25% 之内**（A 方案）：素材/音频/文本/贴纸/特效/转场/字幕/调节/设置；未实现 Tab 不置灰、点开给「功能开发中」；素材面板常驻挂载只 `hidden`（卸载会丢导入/缩略图/file input）；`[hidden]` 被 `display:flex` 盖掉的坑；820px 图标条 40 + 缩略图 64 同步收窄；22 项 E2E（`verify-left-tabs`） |
 
 **当前**：**P0 + P1 + P2 共 64 条全部落地**（4 条为"部分交付"，口径见 §7.1）；postMessage 命令通道已实现（§7.2）。
 需求层面已经没有新功能要补；当前在做的是一条**独立的 UI 重构线**（对标 opencut-classic，
-见 `docs/ui-refactor-plan.md`）：S1.0 布局钩子 / S1.1 顶栏 48px / S1.2 三栏百分比 已完成，
-**S1.3 左栏 9 图标 Tab（待用户拍板图标条是否算在 25% 内）→ S1.4 时间轴 50% → S1.5 控制栏叠画面底部** 待做。
+见 `docs/ui-refactor-plan.md`）：S1.0 布局钩子 / S1.1 顶栏 48px / S1.2 三栏百分比 / **S1.3 左栏 9 图标 Tab 已完成**，
+**S1.4 时间轴 50% → S1.5 控制栏叠画面底部** 待做。
 这条线之外，剩下的都是"真实素材上的手感打磨"与"部分交付"那 4 条要不要接模型。
 
 ---

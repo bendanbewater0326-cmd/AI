@@ -26,6 +26,8 @@
   --v-splitter-h: 4px;
   --v-thumb-w: 90px;
   --v-thumb-h: 51px;
+  /* 左栏图标条（S1.3）：**算在左栏 25% 之内**（A 方案，对齐 opencut-classic） */
+  --v-tabbar-w: 44px;
   --v-radius: 4px;
 
   /* 色板 */
@@ -618,10 +620,167 @@ body.v-splitter-dragging {
 
 .v-rail--left {
   border-right: 0.5px solid var(--v-border);
+  /*
+   * S1.3：左栏内部改成「44px 图标条 + 内容区」的横向两段。
+   * padding / gap 交给内容区（`.v-tabpane`）—— 图标条要贴到栏边缘，
+   * 有 padding 的话那 44px 里会混进 10px 空白，图标条实际只剩 34px。
+   */
+  flex-direction: row;
+  padding: 0;
+  gap: 0;
 }
 
 .v-rail--right {
   border-left: 0.5px solid var(--v-border);
+}
+
+/* ---------- 左栏图标条（S1.3，9 个中文 Tab） ---------- */
+
+/*
+ * 图标 + 中文名竖排（剪映式）。只放图标的话，9 个线性图标里有 4 个
+ * （特效/转场/字幕/调节）在 16px 下很难一眼分辨；加一行 11px 中文名成本很低。
+ * 44px 宽正好容纳 2 个汉字（11px × 2 = 22px）居中。
+ */
+.v-tabbar {
+  flex: 0 0 var(--v-tabbar-w);
+  width: var(--v-tabbar-w);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+  border-right: 0.5px solid var(--v-border);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.v-tabbar::-webkit-scrollbar {
+  width: 0;
+}
+
+.v-tabbar__btn {
+  width: 40px;
+  height: 38px;
+  flex: 0 0 auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  border-radius: var(--v-radius);
+  background: transparent;
+  color: var(--v-fg-dim);
+  cursor: pointer;
+}
+
+.v-tabbar__btn:hover {
+  background: var(--v-surface-2);
+  color: var(--v-fg);
+}
+
+/*
+ * 激活态用"浅色底 + 主色字"，不用左侧竖线色条：
+ * 44px 宽的条里画 2px 竖线会贴到图标左边缘，看起来像排版没对齐。
+ */
+.v-tabbar__btn[data-active='true'] {
+  background: var(--v-accent-weak);
+  color: var(--v-accent);
+}
+
+.v-tabbar__btn:focus-visible {
+  outline: var(--v-focus-ring) solid var(--v-accent);
+  outline-offset: 1px;
+}
+
+.v-tabbar__label {
+  font-size: 11px;
+  line-height: 1.1;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* ---------- 左栏内容区 ---------- */
+
+.v-tabpane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  overflow: hidden;
+}
+
+.v-tabpane__slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * **必须显式写回 `display: none`**：浏览器给 `[hidden]` 的默认样式是
+ * `display: none`，但上面 `.v-tabpane__slot { display: flex }` 的类选择器优先级更高，
+ * 会把它盖掉 —— 于是"隐藏"的素材面板照样占位、照样能点到（典型的 hidden 失效）。
+ */
+.v-tabpane__slot[hidden] {
+  display: none;
+}
+
+.v-assetpane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- 「功能开发中」占位 ---------- */
+
+.v-tabplaceholder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 6px;
+  text-align: center;
+  color: var(--v-fg-dim);
+}
+
+.v-tabplaceholder__icon {
+  width: 36px;
+  height: 36px;
+  margin-bottom: 2px;
+  display: grid;
+  place-items: center;
+  border: 0.5px dashed var(--v-border);
+  border-radius: 50%;
+}
+
+.v-tabplaceholder__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.v-tabplaceholder__title {
+  font-size: 12px;
+  color: var(--v-fg);
+}
+
+.v-tabplaceholder__hint {
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.v-tabplaceholder__hint--dim {
+  opacity: 0.85;
 }
 
 .v-assetpanel__empty {
@@ -1754,6 +1913,23 @@ body.v-track-dragging .v-track-head {
     /* 更窄时收到下限附近（15% 是拖拽的下限，这里不越过它） */
     --v-left-w: 16%;
     --v-right-w: 16%;
+    /*
+     * S1.3：820px 下左栏 16% ≈ 131px，减去 44px 图标条只剩 87px，
+     * 90px 的卡片会被 `overflow-x: hidden` 直接裁掉右边缘（看起来像"缩略图坏了"）。
+     * 所以图标条收到 40px、缩略图同步收到 64px —— 两者一起缩才装得下。
+     */
+    --v-tabbar-w: 40px;
+    --v-thumb-w: 64px;
+    --v-thumb-h: 36px;
+  }
+
+  .v-tabbar__btn {
+    width: 36px;
+    height: 34px;
+  }
+
+  .v-tabpane {
+    padding: 6px;
   }
 }
 

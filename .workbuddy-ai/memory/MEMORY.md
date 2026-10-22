@@ -21,13 +21,15 @@
    统计 / 开关 / 清理未使用 / 清空。
 
 后续优化项记在 `docs/backlog.md`（拷贝队列持久化、配额显示+弱进度、工程打包导出）。
-**合入主分支前注意**：此目录不是 git 仓库；`tests/fixtures/` 有 188MB 测试素材，
+**合入主分支前注意**：仓库已在本地初始化（见下节）；`tests/fixtures/` 有 188MB 测试素材，
 建议忽略大文件 + 用 `gen-baseline.cjs` 生成（详见 backlog 附录）。
 
 ## 版本管理（2026-10-22 建立）
 
-- 仓库已在本地初始化（`git init`），首次提交 `37eb021`，第二次 `fa6987f`（README + 行尾规范）。
-- **还没有远端**（`git remote -v` 为空）。接远端后直接 `git push -u origin main`。
+- 仓库已在本地初始化（`git init`），`main` 分支；S1.3 之前 9 个提交，S1.3 后 10 个。
+- **远端已配置**：`origin = https://github.com/bendanbewater0326-cmd/AI.git`，
+  但**本机到 GitHub 完全不通**（代理 `CONNECT tunnel failed, response 502`，直连 000，
+  关沙箱同样失败）。网络恢复后直接 `git push -u origin main`，不要再 `remote add`。
 - `.gitattributes` 统一 `eol=lf`：此前一半文件是 CRLF，跨平台会出现"整文件被改动"的假 diff。
   写 `.gitignore` / `.gitattributes` **必须用 LF 行尾**（用 python 写要 `newline='\n'`，
   否则规则末尾带 `\r` 匹配不上，踩过一次）。
@@ -79,3 +81,15 @@
 
 **阴点**：折叠右栏时不会暴露（尾部少一项、前面列号不变）。
 凡是"从某一侧移除元素"的布局，**两个方向都要测**。
+
+## 藏 flex 容器别用 `hidden`（2026-10-22 S1.3）
+
+`[hidden]` 的浏览器默认样式 `display: none` **优先级低于类选择器**。
+`.v-tabpane__slot { display: flex }` 会把"隐藏"盖掉 → 元素照样占位、照样能点，
+而且看起来"隐藏逻辑没生效"。必须显式补 `[hidden] { display: none }`。
+
+## "算在里面"要用差值断言，不能只断言自己（2026-10-22 S1.3）
+
+44px 图标条到底是"算在 25% 内"还是"25% + 44px"，1440 下只差 3%，肉眼看不出来。
+断言必须是 `内容区宽 = 左栏宽 − 44`（差值 0），只断言"图标条宽 44"两种实现都绿。
+同 S1.2 的 grid 挤位：**断言元素之间的关系，不要断言元素自己的尺寸**。
