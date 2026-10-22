@@ -98,11 +98,54 @@ try {
     };
   })()`);
 
-  report.check(`① 顶栏 32（${sizes.topbar?.h}）`, sizes.topbar?.h === 32);
-  report.check(`① 左栏 110（${sizes.left?.w}）`, sizes.left?.w === 110);
-  report.check(`① 右栏 110（${sizes.right?.w}）`, sizes.right?.w === 110);
-  report.check(`① 控件条 36（${sizes.ctrlbar?.h}）`, sizes.ctrlbar?.h === 36);
-  report.check(`① 时间线 220（${sizes.timeline?.h}）`, sizes.timeline?.h === 220);
+  /**
+   * 四区尺寸改成**结构性断言**（位置关系 + 合理范围），不再锁死具体数值。
+   *
+   * 原因：布局要从"固定 px（顶栏 32 / 左右栏 110 / 时间线 220）"改成
+   * "百分比 + 可拖拽"（左 25% / 右 25% / 时间线 50%）。锁死数值的断言在重构后
+   * 必然红，而它本来想保证的是"四区不变形、不重叠、不越界"——
+   * 那个用位置关系和范围断言更准确，而且**重构前后都成立**。
+   */
+  const layout = JSON.parse(await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.uiLayout())'));
+  const win = layout.window;
+  const pct = (part) => (part === null ? 0 : (part.h / win.h) * 100);
+
+  report.check(
+    `① 顶栏贴顶、高度 24–64（y=${layout.topbar?.y} h=${layout.topbar?.h}）`,
+    layout.topbar !== null && layout.topbar.y === 0 && layout.topbar.h >= 24 && layout.topbar.h <= 64,
+  );
+  report.check(
+    // 范围同时容纳"重构前的固定 110px"和"重构后的 25% 百分比"
+    `① 左栏贴左、宽度 100–560（x=${layout.left?.x} w=${layout.left?.w}）`,
+    layout.left !== null && layout.left.x === 0 && layout.left.w >= 100 && layout.left.w <= 560,
+  );
+  report.check(
+    `① 右栏贴右、宽度 100–560（w=${layout.right?.w}）`,
+    layout.right !== null && layout.right.w >= 100 && layout.right.w <= 560,
+  );
+  report.check(
+    `① 控件条高度 24–56（${layout.ctrlbar?.h}）`,
+    layout.ctrlbar !== null && layout.ctrlbar.h >= 24 && layout.ctrlbar.h <= 56,
+  );
+  report.check(
+    `① 时间轴高度占窗口 15%–70%（${pct(layout.timeline).toFixed(1)}%）`,
+    layout.timeline !== null && pct(layout.timeline) >= 15 && pct(layout.timeline) <= 70,
+  );
+  report.check(
+    `① 四区纵向不重叠（顶栏底 ${layout.topbar === null ? '-' : layout.topbar.y + layout.topbar.h} ≤ 预览顶 ${layout.stage?.y}）`,
+    layout.topbar !== null && layout.stage !== null && layout.topbar.y + layout.topbar.h <= layout.stage.y,
+  );
+  report.check(
+    `① 时间轴不越界（底 ${layout.timeline === null ? '-' : layout.timeline.y + layout.timeline.h} ≤ 窗口高 ${win.h}）`,
+    layout.timeline !== null && layout.timeline.y + layout.timeline.h <= win.h,
+  );
+  report.check(
+    `① 预览画布在预览区内（${layout.previewCanvas?.w}×${layout.previewCanvas?.h}）`,
+    layout.previewCanvas !== null &&
+      layout.stage !== null &&
+      layout.previewCanvas.w <= layout.stage.w + 1 &&
+      layout.previewCanvas.h <= layout.stage.h + 1,
+  );
   const ratio = sizes.screen ? sizes.screen.w / sizes.screen.h : 0;
   report.check(
     `① 预览 16:9（${sizes.screen?.w}×${sizes.screen?.h} = ${ratio.toFixed(3)}）`,

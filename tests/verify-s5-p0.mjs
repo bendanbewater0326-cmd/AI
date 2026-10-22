@@ -147,7 +147,17 @@ try {
   await sleep(2000);
 
   // 时间线区域拉高，保证 4 条轨都可见（默认 220px 装不下）
-  await page.session.evaluate(`document.documentElement.style.setProperty('--v-timeline-h', '420px')`);
+  /**
+   * 拉高时间线，保证多轨可见。
+   * **同时设 px 与百分比两种变量**：布局重构会把 `--v-timeline-h` 换成百分比，
+   * 这样测试在重构前后都能跑（否则重构后这条会静默失效、测试变成"假通过"）。
+   */
+  await page.session.evaluate(`(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--v-timeline-h', '420px');
+    root.style.setProperty('--v-timeline-pct', '60');
+    return true;
+  })()`);
   await sleep(400);
 
   const base = (await clips())[0];

@@ -57,6 +57,14 @@ const selectFps = (doc: Project): number => doc.fpsMilli;
 const selectAssets = (doc: Project): number => doc.assets.length;
 
 /** 非生产构建的测试钩子（T16 验收用；只读，禁止改 doc）。 */
+/** 一个区域的屏幕矩形（CSS 像素）。 */
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 interface VeditorTestHooks {
   commitCount: number;
   docVersion: () => number;
@@ -148,6 +156,28 @@ interface VeditorTestHooks {
   dropGhost: () => DropGhost | null;
   /** 轨道排序拖拽预览（null = 没在拖）。 */
   trackDrag: () => TrackDrag | null;
+  /**
+   * **四区布局几何**（UI 重构的验收依据）。
+   *
+   * 为什么需要：布局从"固定 px"改成"百分比 + 可拖拽"之后，
+   * 任何"断言顶栏 32px / 左栏 110px"的测试都会失效。
+   * 测试应该断言**位置关系与合理范围**，而不是锁死某个数值 ——
+   * 这个钩子就是那些断言的唯一来源。
+   */
+  uiLayout: () => {
+    window: { w: number; h: number };
+    topbar: Box | null;
+    left: Box | null;
+    right: Box | null;
+    stage: Box | null;
+    ctrlbar: Box | null;
+    timeline: Box | null;
+    timelineViewport: Box | null;
+    timelineCanvas: Box | null;
+    previewCanvas: Box | null;
+    /** 布局用的 CSS 变量当前值（px 或 %）。 */
+    vars: Record<string, string>;
+  };
   /** 时间线几何（E2E 坐标换算的唯一来源，别再硬编码 56/24）。 */
   timelineLayout: () => {
     headerWidth: number;
@@ -983,6 +1013,39 @@ export function App(): ReactElement {
        * 为什么要有：以前测试把 `56` 写死在坐标换算里，于是"轨道头 56→130px"
        * 这种纯视觉改动会让 6 个测试一起红。现在测试一律从这里取几何。
        */
+      uiLayout: () => {
+        const box = (selector: string) => {
+          const element = document.querySelector(selector);
+          if (element === null) return null;
+          const rect = element.getBoundingClientRect();
+          return {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            w: Math.round(rect.width),
+            h: Math.round(rect.height),
+          };
+        };
+        const style = getComputedStyle(document.documentElement);
+        const readVar = (name: string): string => style.getPropertyValue(name).trim();
+        return {
+          window: { w: window.innerWidth, h: window.innerHeight },
+          topbar: box('[data-v="topbar"]'),
+          left: box('[data-v="asset-panel"]'),
+          right: box('[data-v="inspector-panel"]'),
+          stage: box('[data-v="stage"]'),
+          ctrlbar: box('[data-v="ctrlbar"]'),
+          timeline: box('[data-v="timeline"]'),
+          timelineViewport: box('[data-v="timeline-scroll"]'),
+          timelineCanvas: box('[data-v="timeline-canvas"]'),
+          previewCanvas: box('[data-v="preview-canvas"]'),
+          vars: {
+            topbarH: readVar('--v-topbar-h'),
+            railW: readVar('--v-rail-w'),
+            ctrlbarH: readVar('--v-ctrlbar-h'),
+            timelineH: readVar('--v-timeline-h'),
+          },
+        };
+      },
       timelineLayout: () => {
         const layout = trackLayout(store.getDoc());
         return { headerWidth: layout.headerWidth, rulerHeight: layout.rulerHeight, rows: layout.rows, totalHeight: layout.totalHeight };
