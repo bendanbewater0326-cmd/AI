@@ -23,6 +23,14 @@ import { createTextContent } from './types';
 
 export type TextCategory = 'title' | 'caption' | 'label' | 'quote';
 
+/**
+ * 新建文字片段的默认时长（秒）。
+ *
+ * 手动新建（面板 / 工具栏「文字」/ 拖拽）共用这一个常量 ——
+ * 三处各写一个 3 迟早会变成 3 / 3 / 5，用户会觉得"同一个操作时长不一样"。
+ */
+export const TEXT_CLIP_SECONDS = 3;
+
 export interface TextPreset {
   id: string;
   /** 全中文名（界面上不出现英文） */

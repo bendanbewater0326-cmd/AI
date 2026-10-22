@@ -881,6 +881,24 @@ export function createProject(overrides: Partial<Project> = {}): Project {
 }
 
 /**
+ * **合成顺序**（数字越大越后画 = 越靠上）：文字轨永远盖在视频轨之上。
+ *
+ * 与 `trackDisplayOrder`（时间线上的**屏幕**顺序）不是一回事：
+ * 屏幕顺序是"文字轨排在最上面一行"，而合成顺序是"文字盖在画面上"——
+ * 两者的方向相反，混用会让字幕被视频盖住。
+ *
+ * 为什么不能直接用 `track.order`：它只在**同类型**内唯一
+ * （视频 0/1/2…、文字 0/1…），"文字 0"和"视频 0"会撞号，
+ * 排序结果退化成按 startFrame/index —— 表现就是"加了字但画面上看不见"
+ * （实测：文字落到新建的 T1 后，被 V2 盖住，预览像素一点没变）。
+ */
+export function trackCompositeOrder(track: Track): number {
+  if (track.kind === 'text') return 10000 + track.order;
+  if (track.kind === 'audio') return -10000 + track.order;
+  return track.order;
+}
+
+/**
  * 屏幕顺序（自上而下）：视频轨按 `order` 从高到低，音频轨永远垫底（`order` 从高到低）。
  *
  * 时间线绘制与命中测试**必须**共用这个函数——两处各自排序一次就会出现

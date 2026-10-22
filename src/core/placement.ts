@@ -98,7 +98,21 @@ export function pickTrackForInsert(
 }
 
 /**
- * 文字片段落到哪条轨（**手动新建文字 / SRT 导入 / AI 转写共用这一份规则**）。
+ * **一条**文字轨（有就复用，没有就新建），**不检查区间占用**。
+ *
+ * 与 `ensureTextTrackOps` 的区别：那个是"给单个片段找一个放得下的位置"
+ * （占用时换轨甚至新建），这个用于**整段替换**（SRT 导入 / AI 转写）——
+ * 那批 cue 已经做过重叠消解，就该全落在同一条轨上，不能按区间再分流。
+ */
+export function textTrackFor(doc: Project): { ops: ClipOperation[]; trackId: string } {
+  const existing = trackDisplayOrder(doc.tracks).find((track) => track.kind === 'text');
+  if (existing !== undefined) return { ops: [], trackId: existing.id };
+  const track = nextTrackFor(doc, 'text');
+  return { ops: [{ op: 'addTrack', track }], trackId: track.id };
+}
+
+/**
+ * 文字片段落到哪条轨（**手动新建文字 / 拖拽文字 / SRT 导入 / AI 转写共用这一份规则**）。
  *
  * 文字必须落在**文字轨**上，不能借用视频轨：
  * 1. 借用视频轨时，用户之后在它上面新建 V3，文字就被画面盖住（真问题）；

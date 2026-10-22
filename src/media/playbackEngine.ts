@@ -37,7 +37,7 @@
  */
 import { frameToUs, mapProjectFrameToAssetFrame, usToSeconds } from '../core/timebase';
 import type { Clip, Frame, MilliFps, Project, Result, TextContent, Transform, VEditorError } from '../core/types';
-import { makeError } from '../core/types';
+import { makeError, trackCompositeOrder } from '../core/types';
 import type { ColorGrade } from '../render/compositor';
 import type { Compositor, LayerPlacement } from '../render/compositor';
 import { createCompositor } from '../render/compositor';
@@ -584,7 +584,8 @@ class PlaybackEngineImpl implements PlaybackEngine {
     for (const clip of visible) {
       const track = doc.tracks.find((item) => item.id === clip.trackId);
       const placement = {
-        order: track?.order ?? 0,
+        // 合成顺序与屏幕顺序不同：文字轨必须盖在视频轨之上（见 trackCompositeOrder）
+        order: track === undefined ? 0 : trackCompositeOrder(track),
         startFrame: clip.startFrame,
         index: track ? track.clips.indexOf(clip) : 0,
       };

@@ -16,7 +16,8 @@
  * 毫秒 → 微秒 → 项目帧，**不允许在别处写 `/1000`**（时基守卫会拦）。
  */
 import type { ClipOperation, Frame, MilliFps, Project } from '../core/types';
-import { createClip, createTextContent, trackDisplayOrder } from '../core/types';
+import { createClip, createTextContent } from '../core/types';
+import { textTrackFor } from '../core/placement';
 import { frameToMs as tbFrameToMs, msToFrame as tbMsToFrame } from '../core/timebase';
 
 export interface SubtitleCue {
@@ -203,7 +204,7 @@ export function resolveCueOverlaps(cues: readonly SubtitleCue[]): CueResolveResu
 
 export interface SubtitleReplacePlan {
   ops: ClipOperation[];
-  /** 字幕落在哪条轨（最上面的视频轨）。 */
+  /** 字幕落在哪条轨（**文字轨**，没有就顺手建一条）。 */
   trackId: string;
   /** 被替换掉的旧文本片段数。 */
   removed: number;
@@ -219,18 +220,21 @@ export interface SubtitleReplacePlan {
  * 之前这段逻辑只写在顶栏的 SRT 导入里；语音识别也要走同一条路，所以抽到这里
  * （**同一条规则只能有一个定义点**）。
  *
- * 返回 `null` = 工程里没有视频轨（文本片段挂不到任何地方）。
+ * 落轨走 `textTrackFor`：**字幕与手动添加的文字落在同一条文字轨**。
+ * 2026-10-23 之前这里找的是"最上面的视频轨"，于是手动加的字在 T1、导入的字幕在 V2，
+ * 用户会以为"字幕没导进来"（两条轨在时间线上离得很远）。
+ *
+ * 不再返回 `null`：没有文字轨就建一条，没有视频轨也能放字幕。
  */
 export function buildSubtitleReplaceOps(
   cues: readonly SubtitleCue[],
   doc: Project,
-): SubtitleReplacePlan | null {
-  const track = trackDisplayOrder(doc.tracks).find((item) => item.kind === 'video');
-  if (track === undefined) return null;
+): SubtitleReplacePlan {
   // 先消解重叠：SRT 里允许两条时间轴交叠（双语字幕、工具生成），但落到时间线上
   // 就是同轨重叠的两个文本片段——两行字叠着画，谁都看不清。
   const resolved = resolveCueOverlaps(cues);
-  const ops: ClipOperation[] = [];
+  const placement = textTrackFor(doc);
+  const ops: ClipOperation[] = [...placement.ops];
   let removed = 0;
   for (const existing of doc.tracks) {
     for (const clip of existing.clips) {
@@ -240,10 +244,10 @@ export function buildSubtitleReplaceOps(
       }
     }
   }
-  for (const clip of buildSubtitleClips(resolved.cues, doc, { trackId: track.id })) {
+  for (const clip of buildSubtitleClips(resolved.cues, doc, { trackId: placement.trackId })) {
     ops.push({ op: 'addClip', clip });
   }
-  return { ops, trackId: track.id, removed, truncated: resolved.truncated };
+  return { ops, trackId: placement.trackId, removed, truncated: resolved.truncated };
 }
 
 /** 从工程里提取字幕（所有文本片段），按起点排序。 */export function extractSubtitles(doc: Project): SubtitleCue[] {

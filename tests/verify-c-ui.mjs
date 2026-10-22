@@ -83,9 +83,10 @@ try {
   report.check(`① 生成文本片段（${textClip ? textClip.text.content : '无'}）`, textClip !== undefined);
   report.check(`① 文本片段 90 帧（${textClip?.durationFrames}）`, textClip?.durationFrames === 90);
   const textTrack = await page.session.evaluate(
-    `(() => { const c = window.__VEDITOR_TEST__.clips().find((x) => x.text); const t = window.__VEDITOR_TEST__.tracks().find((x) => x.id === c.trackId); return t.name; })()`,
+    `(() => { const c = window.__VEDITOR_TEST__.clips().find((x) => x.text); const t = window.__VEDITOR_TEST__.tracks().find((x) => x.id === c.trackId); return t ? t.name + ':' + t.kind : 'none'; })()`,
   );
-  report.check(`① 落在最上层视频轨（${textTrack}）`, textTrack === 'V2');
+  // 2026-10-23 起文字落**文字轨**（原来是"最上层视频轨"，会被后建的视频轨盖住）
+  report.check(`① 落在文字轨（${textTrack}）`, textTrack === 'T1:text');
 
   // ② 预览出现白字
   const after = JSON.parse(await page.session.evaluate("(async () => JSON.stringify(await window.__VEDITOR_TEST__.previewSnapshot()))()"));
@@ -124,7 +125,15 @@ try {
     await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.timelineLayout())'),
   );
   const clipClickX = rect.x + tlLayout.headerWidth + 60;
-  const clipClickY = rect.y + tlLayout.rows[1].top + tlLayout.rows[1].height / 2;
+  /**
+   * 行号**按 trackId 找**，不能写 `rows[1]`：2026-10-23 起文字落独立文字轨，
+   * 屏幕顺序变成 [T1, V2, V1, A1]，`rows[1]` 是空的 V2 —— 点下去什么都没选中。
+   */
+  const videoTrackId = await page.session.evaluate(
+    "window.__VEDITOR_TEST__.clips().find((c) => c.text === null)?.trackId ?? ''",
+  );
+  const videoRow = tlLayout.rows.find((row) => row.trackId === videoTrackId) ?? tlLayout.rows[1];
+  const clipClickY = rect.y + videoRow.top + videoRow.height / 2;
   await page.session.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: clipClickX, y: clipClickY, button: 'left', clickCount: 1 });
   await page.session.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: clipClickX, y: clipClickY, button: 'left', clickCount: 1 });
   await new Promise((resolve) => setTimeout(resolve, 300));

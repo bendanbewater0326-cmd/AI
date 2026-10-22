@@ -56,3 +56,51 @@ export function readAssetDrag(dataTransfer: DataTransfer | null): string | null 
   const prefix = 'veditor-asset:';
   return fallback.startsWith(prefix) ? fallback.slice(prefix.length) : null;
 }
+
+/* ================= 文字模板（左栏「文本」→ 时间线） ================= */
+
+/**
+ * 文字模板的 MIME。
+ *
+ * 与素材**分开**是必须的：两者在时间线上的落点语义完全不同 ——
+ * 素材要按"目标轨 + 占用避让"落，文字**永远落文字轨**（纵向位置由规则决定，
+ * 只有横向的帧号听用户的）。同一个 MIME 会让 onDrop 里长出一堆 if。
+ */
+export const TEXT_MIME = 'application/x-veditor-text';
+
+/** 正在拖的模板 id（dragover 阶段读不到 getData，只能靠模块变量）。 */
+let draggingTextId: string | null = null;
+
+export function getDraggingTextId(): string | null {
+  return draggingTextId;
+}
+
+export function clearDraggingText(): void {
+  draggingTextId = null;
+}
+
+/** 拖起一张文字模板卡。 */
+export function setTextDrag(dataTransfer: DataTransfer | null, presetId: string): void {
+  draggingTextId = presetId;
+  if (dataTransfer === null) return;
+  dataTransfer.setData(TEXT_MIME, presetId);
+  // 同素材：某些 WebView2 版本在 `types` 里不认纯自定义 MIME，补一个带前缀的 text/plain 兜底
+  dataTransfer.setData('text/plain', `veditor-text:${presetId}`);
+  dataTransfer.effectAllowed = 'copy';
+}
+
+/** 这次拖拽是不是文字模板（dragover 阶段只能用 types 判断）。 */
+export function hasTextDrag(dataTransfer: DataTransfer | null): boolean {
+  if (dataTransfer === null) return false;
+  return Array.from(dataTransfer.types).includes(TEXT_MIME);
+}
+
+/** 读出被拖的模板 id（drop 阶段）。 */
+export function readTextDrag(dataTransfer: DataTransfer | null): string | null {
+  if (dataTransfer === null) return null;
+  const direct = dataTransfer.getData(TEXT_MIME);
+  if (direct !== '') return direct;
+  const fallback = dataTransfer.getData('text/plain');
+  const prefix = 'veditor-text:';
+  return fallback.startsWith(prefix) ? fallback.slice(prefix.length) : null;
+}

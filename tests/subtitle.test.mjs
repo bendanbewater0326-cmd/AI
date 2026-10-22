@@ -220,24 +220,56 @@ test('④a buildSubtitleReplaceOps：旧字幕整段移除 + 新字幕逐条添�
     doc,
   );
   eq(plan.removed, 1, '旧的 1 条文本片段被替换');
-  eq(plan.trackId, 'trk_V1');
+  /**
+   * 2026-10-23 起字幕落**文字轨**（与手动添加的文字、拖拽的模板同一条规则）。
+   * 工程里没有文字轨 → 计划里**顺手带一条 addTrack**，与字幕一起提交（仍是一个撤销步）。
+   */
+  eq(plan.trackId, 'trk_T1', '字幕落在文字轨');
+  const addTracks = plan.ops.filter((op) => op.op === 'addTrack');
+  eq(addTracks.length, 1, '没有文字轨时自动建一条');
+  eq(addTracks[0].track.kind, 'text');
   const removes = plan.ops.filter((op) => op.op === 'removeClip');
   const adds = plan.ops.filter((op) => op.op === 'addClip');
   eq(removes.length, 1);
   eq(adds.length, 2);
-  eq(plan.ops.length, 3, '一批 op（一次 dispatch = 一个撤销步）');
+  // 1 条建轨 + 1 条移除 + 2 条添加 = 4，一次 dispatch = 一个撤销步
+  eq(plan.ops.length, 4, '一批 op（一次 dispatch = 一个撤销步）');
+  eq(adds[0].clip.trackId, 'trk_T1', '字幕片段挂在文字轨上');
   // 只移除文本片段，不碰视频片段
   eq(removes[0].clipId, oldClip.id);
 });
 
-test('④b 没有视频轨 → null（调用方给可读错误，不静默失败）', () => {
+test('④b 已有文字轨时复用，不重复建轨', () => {
+  const textTrack = types.createTrack({ id: 'trk_T1', kind: 'text', order: 0, clips: [] });
+  const videoClip = types.createClip({
+    assetId: 'ast', trackId: 'trk_V1', startFrame: 0, inFrame: 0, outFrame: 240, durationFrames: 240,
+  });
+  const doc = {
+    id: 'p', name: 't', fpsMilli: 30000, width: 1280, height: 720,
+    sampleRate: 48000, frameMapPolicy: 'holdPrevious', durationRounding: 'halfUp',
+    tracks: [textTrack, types.createTrack({ id: 'trk_V1', kind: 'video', order: 0, clips: [videoClip] })],
+    assets: [], playheadFrame: 0, zoomLevel: 5, schemaVersion: 1, createdAt: 0, updatedAt: 0,
+  };
+  const plan = srt.buildSubtitleReplaceOps([{ startMs: 0, endMs: 1000, text: '字幕' }], doc);
+  eq(plan.trackId, 'trk_T1');
+  eq(plan.ops.filter((op) => op.op === 'addTrack').length, 0, '已有文字轨不该再建');
+});
+
+test('④c 没有视频轨也能放字幕（2026-10-23 起不再返回 null）', () => {
+  /**
+   * 旧行为：找不到视频轨就返回 null，调用方报「没有可放字幕的视频轨」。
+   * 现在字幕落**文字轨**，与视频轨无关 —— 纯音频工程也能加字幕。
+   */
   const doc = {
     id: 'p', name: 't', fpsMilli: 30000, width: 1280, height: 720,
     sampleRate: 48000, frameMapPolicy: 'holdPrevious', durationRounding: 'halfUp',
     tracks: [types.createTrack({ id: 'trk_A1', kind: 'audio', order: 0, clips: [] })],
     assets: [], playheadFrame: 0, zoomLevel: 5, schemaVersion: 1, createdAt: 0, updatedAt: 0,
   };
-  eq(srt.buildSubtitleReplaceOps([{ startMs: 0, endMs: 1000, text: 'x' }], doc), null);
+  const plan = srt.buildSubtitleReplaceOps([{ startMs: 0, endMs: 1000, text: 'x' }], doc);
+  eq(plan.trackId, 'trk_T1');
+  eq(plan.ops.filter((op) => op.op === 'addTrack').length, 1, '顺手建一条文字轨');
+  eq(plan.ops.filter((op) => op.op === 'addClip').length, 1);
 });
 
 test('⑤a resolveCueOverlaps：重叠 → 前一条尾巴收到后一条起点', () => {

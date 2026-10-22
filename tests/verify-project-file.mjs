@@ -121,7 +121,9 @@ try {
   );
   report.check(
     `① 源工程就绪（${before.count} 段 / ${before.duration} 帧 / 轨道 ${before.tracks}）`,
-    before.count === 2 && before.duration === 240 && before.tracks === 3,
+    // 轨道数不写死：2026-10-23 起「添加文字」会顺手建一条文字轨（3 → 4）。
+    // 这里只要求"至少三条基础轨"，避免每加一类轨就要改一次这个数字。
+    before.count === 2 && before.duration === 240 && before.tracks >= 3,
   );
 
   // ---- ② 导出工程文件 ----

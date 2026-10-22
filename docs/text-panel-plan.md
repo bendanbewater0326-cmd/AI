@@ -1,8 +1,17 @@
 # 左栏「文本」面板实现方案
 
-> 状态：**第 1 步已交付（2026-10-23）**，第 2、3 步待做。  
+> 状态：**第 1、2 步已交付（2026-10-23）**，第 3 步（我的预设）待做。  
 > 目标：把左栏第 3 个 Tab（文本）从「功能开发中」占位换成真正的文字模板库，  
 > 交互对齐 opencut-classic：**顶部分类筛选 + 中部缩略图网格 + 点击/拖拽一键应用**。
+
+## 交付记录（第 2 步）
+
+拖拽应用（独立 MIME `application/x-veditor-text`，ghost 落在文字轨、落点吸附）+
+落轨全链路统一（`addText` / SRT 导入 / AI 转写全部走 `ensureTextTrackOps`）。
+
+**顺带修掉一个真 bug**：`LayerPlacement.order` 直接用了 `track.order`，而它只在同类型内唯一，
+文字轨 order=0 与 V1 的 order=0 撞号 → 文字被 V2 盖住（doc 里有字、预览像素不变）。
+新增 `core/types.trackCompositeOrder()`（文字 `10000+order`）—— 合成顺序与屏幕顺序方向相反。
 
 ## 交付记录（第 1 步）
 

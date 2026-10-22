@@ -26,9 +26,9 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Clip, Project, Track, TrackKind } from '../core/types';
-import { createClip, createTextContent, makeError, normalizeRotation, trackDisplayOrder } from '../core/types';
-import { buildPlaceAssetOps, nextTrackFor, trackRemoveBlockReason } from '../core/placement';
+import type { Clip, ClipOperation, Project, Track, TrackKind } from '../core/types';
+import { createClip, createTextContent, makeError, normalizeRotation } from '../core/types';
+import { buildPlaceAssetOps, ensureTextTrackOps, nextTrackFor, trackRemoveBlockReason } from '../core/placement';
 import { secondsToFrames } from '../core/timebase';
 import { trackLayout, trackRowAtY } from '../core/trackLayout';
 import {
@@ -69,7 +69,17 @@ import { ContextMenu } from './ContextMenu';
 import { TrackHeader } from './TrackHeader';
 import type { ContextMenuItem, ContextMenuState } from './ContextMenu';
 import { formatTimecode } from './TopBar';
-import { clearDraggingAsset, getDraggingAssetId, hasAssetDrag, readAssetDrag } from './dnd';
+import {
+  clearDraggingAsset,
+  clearDraggingText,
+  getDraggingAssetId,
+  getDraggingTextId,
+  hasAssetDrag,
+  hasTextDrag,
+  readAssetDrag,
+  readTextDrag,
+} from './dnd';
+import { TEXT_CLIP_SECONDS, presetToText, textPresetById } from '../core/textPresets';
 
 /** 从 CSS 变量读时间线配色（深色主题时覆盖）。 */
 function readColors(): TimelineColors {
@@ -488,7 +498,76 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     return buildPlaceAssetOps(docNow, asset, target.frame, { trackId: target.track.id });
   }
 
+  /** 拖文字的结果：要么给操作，要么给可读原因（与 buildPlaceAssetOps 同一种形状）。 */
+  type TextDropPlan =
+    | { message: string }
+    | { ops: ClipOperation[]; clipId: string; trackId: string; durationFrames: number };
+
+  /**
+   * 拖**文字模板**的落点计划。
+   *
+   * 与素材最大的不同：**纵向位置不听用户的** —— 文字永远落文字轨（没有就建一条），
+   * 用户拖到哪条轨都一样，只有横向的帧号生效。所以这里不看 `target.track`，
+   * 只取 `target.frame`。
+   *
+   * 与点击新建共用 `ensureTextTrackOps` + `TEXT_CLIP_SECONDS`，
+   * 保证"拖进来"和"点一下"得到的东西完全一样。
+   */
+  function planForTextDrop(presetId: string, frame: number): TextDropPlan {
+    const preset = textPresetById(presetId);
+    if (preset === null) return { message: '模板不存在' };    const docNow = store.getDoc();
+    const durationFrames = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, docNow.fpsMilli));
+    const placement = ensureTextTrackOps(docNow, frame, durationFrames);
+    const clip = createClip({
+      assetId: '',
+      trackId: placement.trackId,
+      startFrame: frame,
+      inFrame: 0,
+      outFrame: durationFrames,
+      durationFrames,
+      text: presetToText(preset, undefined, { width: docNow.width, height: docNow.height }),
+    });
+    return {
+      ops: [...placement.ops, { op: 'addClip' as const, clip }],
+      clipId: clip.id,
+      trackId: placement.trackId,
+      durationFrames,
+    };
+  }
+
   function onDragOver(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasTextDrag(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      const target = dropTargetAt(event);
+      const presetId = getDraggingTextId();
+      if (target === null || presetId === null) {
+        store.setDropGhost(null);
+        return;
+      }
+      const plan = planForTextDrop(presetId, target.frame);
+      if ('message' in plan) {
+        store.setDropGhost(null);
+        return;
+      }
+      /**
+       * ghost 只能画在**已经存在**的轨上。
+       * 工程里还没有文字轨时，这一拖会顺手建一条 —— 此时没有行可以画预览，
+       * 宁可不画，也不要把 ghost 画在鼠标所在的那条视频轨上（落点会在另一条轨上）。
+       */
+      const trackExists = store.getDoc().tracks.some((track) => track.id === plan.trackId);
+      store.setDropGhost(
+        trackExists
+          ? {
+              trackId: plan.trackId,
+              startFrame: target.frame,
+              durationFrames: plan.durationFrames,
+              valid: true,
+            }
+          : null,
+      );
+      return;
+    }
     if (!hasAssetDrag(event.dataTransfer)) return;
     // **必须 preventDefault**，否则浏览器不允许 drop（HTML5 拖放的硬规则）
     event.preventDefault();
@@ -521,7 +600,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onDragLeave(event: React.DragEvent<HTMLCanvasElement>): void {
-    if (!hasAssetDrag(event.dataTransfer)) return;
+    if (!hasAssetDrag(event.dataTransfer) && !hasTextDrag(event.dataTransfer)) return;
     // 只有真的离开画布才清：在画布内部换轨道时 dragleave 也会触发
     const canvas = canvasRef.current;
     if (canvas !== null) {
@@ -533,6 +612,23 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onDrop(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasTextDrag(event.dataTransfer)) {
+      event.preventDefault();
+      const presetId = readTextDrag(event.dataTransfer) ?? getDraggingTextId();
+      clearDraggingText();
+      store.setDropGhost(null);
+      if (presetId === null) return;
+      const textTarget = dropTargetAt(event);
+      if (textTarget === null) return;
+      const plan = planForTextDrop(presetId, textTarget.frame);
+      if ('message' in plan) {
+        store.pushError(makeError('E_INVALID_PROJECT', plan.message));
+        return;
+      }
+      store.dispatch(plan.ops, `拖入文字（${textPresetById(presetId)?.name ?? '文字'}）`);
+      store.setSelectedClipId(plan.clipId);
+      return;
+    }
     if (!hasAssetDrag(event.dataTransfer)) return;
     event.preventDefault();
     const assetId = readAssetDrag(event.dataTransfer) ?? getDraggingAssetId();
@@ -823,23 +919,28 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     store.dispatch([{ op: 'renameTrack', trackId: track.id, from: track.name, to: name }], '重命名轨道');
   }
 
-  /** 在播放头处加一段 3 秒文字（R-034）。放在最上层的视频轨，避免被素材盖住。 */
+  /**
+   * 在播放头处加一段文字（R-034）。
+   *
+   * 2026-10-23 起落**文字轨**（与左栏模板库、拖拽、SRT 导入同一条规则）。
+   * 旧实现落"最上层视频轨"，用户之后在它上面新建 V3 就把文字盖住了。
+   */
   function addText(): void {
     const docNow = store.getDoc();
-    const track = trackDisplayOrder(docNow.tracks).find((item) => item.kind === 'video');
-    if (track === undefined) return;
     const start = store.getPlayheadFrame();
-    const duration = Math.max(1, secondsToFrames(3, docNow.fpsMilli));
+    const duration = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, docNow.fpsMilli));
+    const placement = ensureTextTrackOps(docNow, start, duration);
     const clip = createClip({
       assetId: '',
-      trackId: track.id,
+      trackId: placement.trackId,
       startFrame: start,
       inFrame: 0,
       outFrame: duration,
       durationFrames: duration,
       text: createTextContent(),
     });
-    store.dispatch([{ op: 'addClip', clip }], '添加文字');
+    // 建轨与落片**同批提交**：一次撤销全回退，不会留下一条空的文字轨
+    store.dispatch([...placement.ops, { op: 'addClip', clip }], '添加文字');
     store.setSelectedClipId(clip.id);
   }
 

@@ -250,6 +250,101 @@ try {
     cardStyle?.color === 'rgb(255, 255, 255)' && bigClip?.text?.color === '#ffffff' && cardStyle?.weight === '700' && bigClip?.text?.bold === true,
   );
 
+  // ---- ⑦c 拖拽应用：把「主标题」拖到时间线第 ~120 帧 ----
+  /**
+   * 用真实 `DragEvent` + `DataTransfer` 打到 canvas 上（不是直接调函数）：
+   * 这样 dragover → ghost、drop → dispatch 两条链路都真的跑一遍。
+   * 注意 `dragover` 必须 `preventDefault`，否则浏览器不允许 drop（HTML5 硬规则），
+   * 而我们的 handler 里就写了这一句 —— 它要是丢了，这条测试会直接红。
+   */
+  const dragTarget = JSON.parse(
+    await page.session.evaluate(`(() => {
+      const canvas = document.querySelector('[data-v="timeline-canvas"]');
+      const layout = window.__VEDITOR_TEST__.timelineLayout();
+      const row = layout.rows.find((item) => item.kind === 'text');
+      if (!canvas || !row) return JSON.stringify(null);
+      const rect = canvas.getBoundingClientRect();
+      const scrollX = Number(canvas.dataset['scrollX'] ?? '0');
+      const zoom = window.__VEDITOR_TEST__.zoomLevel();
+      return JSON.stringify({
+        frame120: { x: rect.left + layout.headerWidth + 120 * zoom - scrollX, y: rect.top + row.top + row.height / 2 },
+        header: { x: rect.left + 40, y: rect.top + row.top + row.height / 2 },
+        textTrackId: row.trackId,
+      });
+    })()`),
+  );
+  /**
+   * 完整模拟一次拖拽：卡片 `dragstart` → 画布 `dragover` → 画布 `drop`。
+   *
+   * **必须补 dragstart**：dragover 阶段浏览器不允许读 getData()，所以实现里靠
+   * `ui/dnd` 的页面内变量传 id —— 那个变量只有在真正的 dragstart 里才会被写上。
+   * 只发 dragover/drop 的话，落点预览（ghost）永远是空的。
+   */
+  /**
+   * 完整模拟一次拖拽：卡片 `dragstart` → 画布 `dragover` → 画布 `drop`。
+   *
+   * **必须补 dragstart**：dragover 阶段浏览器不允许读 getData()，所以实现里靠
+   * `ui/dnd` 的页面内变量传 id —— 那个变量只有在真正的 dragstart 里才会被写上。
+   * 只发 dragover/drop 的话，落点预览（ghost）永远是空的。
+   */
+  const dragText = async (point, presetId) =>
+    JSON.parse(
+      await page.session.evaluate(`(() => {
+        const canvas = document.querySelector('[data-v="timeline-canvas"]');
+        const card = document.querySelector('[data-v="text-preset"][data-preset-id="${presetId}"]');
+        const dt = new DataTransfer();
+        const make = (type, target) => {
+          const event = new DragEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: dt,
+            clientX: ${point.x},
+            clientY: ${point.y},
+          });
+          target.dispatchEvent(event);
+          return event;
+        };
+        // 真实拖拽的顺序：先在源上 dragstart（写入 MIME + 页面内变量），再在目标上 dragover
+        if (card) make('dragstart', card);
+        const over = make('dragover', canvas);
+        const ghost = window.__VEDITOR_TEST__.dropGhost();
+        make('drop', canvas);
+        return JSON.stringify({ prevented: over.defaultPrevented, ghost });
+      })()`),
+    );
+
+  const beforeDrag = (await textClips()).length;
+  const dragResult = await dragText(dragTarget.frame120, 'tpl-title-main');
+  await sleep(400);
+  const afterDrag = await textClips();
+  const dropped = afterDrag.find((clip) => clip.text?.content === '主标题');
+  const tracksNow = await tracks();
+  /** 落点可能在 T1 也可能在 T2（前面几步已经建了不止一条文字轨），只要求"是文字轨"。 */
+  const trackKindOf = (trackId) => tracksNow.find((track) => track.id === trackId)?.kind ?? null;
+  report.check(
+    `⑦c 拖「主标题」到第 120 帧 → 新建片段（startFrame=${dropped?.startFrame}，期望 120±1）`,
+    afterDrag.length === beforeDrag + 1 && dropped !== undefined && Math.abs(dropped.startFrame - 120) <= 1,
+  );
+  report.check(
+    `⑦d 拖拽过程有落点预览（dragover 被 preventDefault=${dragResult.prevented}，ghost 落在 ${dragResult.ghost?.trackId}，valid=${dragResult.ghost?.valid}）`,
+    dragResult.prevented === true &&
+      dragResult.ghost?.valid === true &&
+      trackKindOf(dragResult.ghost?.trackId) === 'text',
+  );
+  report.check(
+    `⑦e 拖进来的文字也在文字轨上（${dropped?.trackId} → kind=${trackKindOf(dropped?.trackId)}）`,
+    trackKindOf(dropped?.trackId) === 'text',
+  );
+
+  const beforeHeaderDrag = (await textClips()).length;
+  await dragText(dragTarget.header, 'tpl-title-sub');
+  await sleep(300);
+  report.check(
+    `⑦f 拖到轨道头列不新建（${beforeHeaderDrag} → ${(await textClips()).length}）`,
+    (await textClips()).length === beforeHeaderDrag,
+  );
+
+
   // ---- ⑧ 描边/粗体真的画出来（读画面像素）----
   /**
    * 做法：**刷新回干净工程** → 隐藏视频轨（背景变纯黑）→ 套「白底黑字条」

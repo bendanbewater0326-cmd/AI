@@ -132,3 +132,10 @@ CDP 拖拽的最后一次 `mousemove` 与 `mouseReleased` 之间要留 60ms 并�
 `capturePreset`/`normalizePayload` → `host/projectInput.ts` 的 `normalizeText`。
 漏掉缓存 key：改了样式画面不变（只断言 doc 字段测不出来）。
 漏掉 normalizeText：存盘再打开样式消失。
+
+## `track.order` 只在同类型内唯一，不能当合成顺序（2026-10-23）
+
+视频 0/1/2…、文字 0/1… 会撞号，"文字 0"与"视频 0"谁先画取决于 startFrame/index
+→ **文字被视频盖住**，症状是"doc 里有文字、预览像素一点没变"。
+合成顺序一律走 `core/types.trackCompositeOrder()`（文字 `10000+order`）。
+注意它和 `trackDisplayOrder` **方向相反**：屏幕顺序文字在最上一行，合成顺序文字最后画。

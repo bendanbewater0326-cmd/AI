@@ -32,13 +32,12 @@ import type { ReactElement } from 'react';
 import { createClip, createTextContent } from '../core/types';
 import type { TextContent } from '../core/types';
 import { ensureTextTrackOps } from '../core/placement';
-import { TEXT_CATEGORIES, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
+import { TEXT_CATEGORIES, TEXT_CLIP_SECONDS, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
 import type { TextCategory, TextPreset } from '../core/textPresets';
 import { store } from '../core/store';
 import { secondsToFrames } from '../core/timebase';
+import { clearDraggingText, setTextDrag } from './dnd';
 
-/** 新建文字片段的默认时长（与时间线工具栏的「文字」按钮一致）。 */
-const DEFAULT_TEXT_SECONDS = 3;
 
 /**
  * 缩略图放大倍数。
@@ -95,7 +94,7 @@ export function TextPanel(): ReactElement {
   function createText(preset: TextPreset | null): void {
     const doc = store.getDoc();
     const startFrame = store.getPlayheadFrame();
-    const durationFrames = Math.max(1, secondsToFrames(DEFAULT_TEXT_SECONDS, doc.fpsMilli));
+    const durationFrames = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, doc.fpsMilli));
     const { ops, trackId } = ensureTextTrackOps(doc, startFrame, durationFrames);
     const clip = createClip({
       assetId: '',
@@ -158,9 +157,19 @@ export function TextPanel(): ReactElement {
             data-v="text-preset"
             data-preset-id={preset.id}
             data-category={preset.category}
-            aria-label={`${preset.name}（点击应用）`}
-            title={`${preset.name}（点击应用）`}
+            aria-label={`${preset.name}（点击应用，或拖到时间线）`}
+            title={`${preset.name}（点击应用，或拖到时间线）`}
             onClick={() => applyPreset(preset)}
+            /**
+             * 可拖到时间线（第二步）。
+             *
+             * 用**独立 MIME**（`application/x-veditor-text`）而不是复用素材那个：
+             * 文字的落点语义是"永远落文字轨、只有帧号听用户的"，和素材的
+             * "按目标轨 + 占用避让"完全是两套规则。
+             */
+            draggable
+            onDragStart={(event) => setTextDrag(event.dataTransfer, preset.id)}
+            onDragEnd={clearDraggingText}
           >
             <span className="v-textcard__stage" data-v="text-preset-preview" data-bg={preset.previewBg}>
               <span className="v-textcard__text" style={previewStyle(preset.style)}>

@@ -237,11 +237,8 @@ async function importSubtitles(file: File): Promise<void> {
     return;
   }
   const doc = store.getDoc();
+  // 落轨规则收敛在 `core/placement.textTrackFor`：字幕与手动添加的文字同一条文字轨
   const plan = buildSubtitleReplaceOps(parsed.cues, doc);
-  if (plan === null) {
-    store.pushError(makeError('E_INVALID_PROJECT', '没有可放字幕的视频轨'));
-    return;
-  }
   // 重叠 cue 会被截短尾巴（字幕不能同时出现两条），条数要说出来——
   // 用户导入双语/工具生成的 SRT 时会看到"条数比文件里少"，不说明就是静默改数据。
   const truncatedNote = plan.truncated > 0 ? `，${plan.truncated} 条重叠已截短` : '';

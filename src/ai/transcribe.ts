@@ -182,9 +182,6 @@ export async function transcribeTimeline(
   }
 
   const plan = buildSubtitleReplaceOps(cues, doc);
-  if (plan === null) {
-    return fail(makeError('E_INVALID_PROJECT', '没有可放字幕的视频轨', '先往时间线上拖一段素材'));
-  }
 
   return ok({
     cues,
