@@ -517,6 +517,8 @@ export interface EphemeralState {
    * `valid === false` 时画红块（视频拖到音频轨、轨道被锁等），松手给可读错误。
    */
   dropGhost: DropGhost | null;
+  /** 拖转场时的落点预览（null = 没在拖转场）。 */
+  transitionGhost: TransitionGhost | null;
   /**
    * 正在拖动轨道头排序（只画指示线，松手才提交）。
    *
@@ -543,6 +545,23 @@ export interface DropGhost {
   durationFrames: Frame;
   valid: boolean;
   /** 不可落时的可读原因（painter 不画，松手时报给用户）。 */
+  reason?: string;
+}
+
+/**
+ * 转场拖拽的落点预览。
+ *
+ * 与 `DropGhost` 分开：素材/文字的 ghost 是"在轨道上放一块内容"（有起点 + 时长），
+ * 转场是"贴在某个片段的某一侧"（没有独立的时间跨度）—— 共用一个结构会逼着
+ * painter 去猜 `durationFrames === 0` 是什么意思。
+ */
+export interface TransitionGhost {
+  clipId: string;
+  side: 'in' | 'out';
+  /** 画出来的跨度（叠化取 D/2、淡出取 D），只用于视觉反馈 */
+  durationFrames: Frame;
+  valid: boolean;
+  /** 不可落时的可读原因（painter 不画，松手时报给用户） */
   reason?: string;
 }
 

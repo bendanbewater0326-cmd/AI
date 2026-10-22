@@ -26,7 +26,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Clip, ClipOperation, Project, Track, TrackKind } from '../core/types';
+import type { Clip, ClipOperation, Frame, Project, Track, TrackKind } from '../core/types';
 import { createClip, createTextContent, makeError, normalizeRotation } from '../core/types';
 import { buildPlaceAssetOps, ensureTextTrackOps, nextTrackFor, trackRemoveBlockReason } from '../core/placement';
 import { secondsToFrames } from '../core/timebase';
@@ -72,14 +72,29 @@ import { formatTimecode } from './TopBar';
 import {
   clearDraggingAsset,
   clearDraggingText,
+  clearDraggingTransition,
   getDraggingAssetId,
   getDraggingTextId,
+  getDraggingTransition,
   hasAssetDrag,
   hasTextDrag,
+  hasTransitionDrag,
   readAssetDrag,
   readTextDrag,
+  readTransitionDrag,
 } from './dnd';
 import { TEXT_CLIP_SECONDS, presetToText, textPresetById } from '../core/textPresets';
+import { transitionPresetById } from '../core/transitionPresets';
+import { buildTransitionOps, clipAtFrame, resolveDuration, resolveTransitionTarget, snapToSeam } from '../core/transitionTarget';
+
+/**
+ * 拖转场时的接缝吸附半径（px）。
+ *
+ * 12px 是"手指大概放在接缝上"的容差：太小吃不到（叠化会误命中左边那段，
+ * 然后因为左段没有左邻直接判不可用），太大则用户明明放在片段中间也被吸走。
+ * 换算成帧要除以 zoom（见 `planForTransitionDrop`）。
+ */
+const SEAM_SNAP_PX = 12;
 
 /** 从 CSS 变量读时间线配色（深色主题时覆盖）。 */
 function readColors(): TimelineColors {
@@ -167,7 +182,10 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   useEffect(() => {
     const cleanup = (): void => {
       clearDraggingAsset();
+      clearDraggingText();
+      clearDraggingTransition();
       if (store.getEphemeral().dropGhost !== null) store.setDropGhost(null);
+      if (store.getEphemeral().transitionGhost !== null) store.setTransitionGhost(null);
     };
     window.addEventListener('dragend', cleanup);
     window.addEventListener('drop', cleanup);
@@ -504,6 +522,20 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     | { ops: ClipOperation[]; clipId: string; trackId: string; durationFrames: number };
 
   /**
+   * 拖转场的结果。
+   *
+   * 与 `TextDropPlan` 不同：即使**不可落**也要给出 `clipId`/`side`，
+   * 因为要画一个**红色**楔形告诉用户"这里不行、原因是叠化缺左邻"。
+   */
+  type TransitionDropPlan = {
+    clipId: string;
+    side: 'in' | 'out';
+    durationFrames: number;
+    ops?: ClipOperation[];
+    message?: string;
+  };
+
+  /**
    * 拖**文字模板**的落点计划。
    *
    * 与素材最大的不同：**纵向位置不听用户的** —— 文字永远落文字轨（没有就建一条），
@@ -535,7 +567,67 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     };
   }
 
+  /**
+   * 拖**转场**的落点计划。
+   *
+   * 与素材/文字的关键差别：转场**没有自己的时间跨度**，它贴在某个片段的某一侧。
+   * 所以先做**接缝吸附**（±12px 换算成帧），再交给 `resolveTransitionTarget` 判
+   * "有没有片段 / 叠化有没有左邻"。落点逻辑与点击应用共用同一份规则。
+   */
+  function planForTransitionDrop(
+    presetId: string,
+    seconds: number,
+    track: Track,
+    frame: Frame,
+  ): TransitionDropPlan | null {
+    const preset = transitionPresetById(presetId);
+    if (preset === null) return null;
+    const docNow = store.getDoc();
+    const tolerance = Math.max(1, Math.round(SEAM_SNAP_PX / Math.max(1, docNow.zoomLevel)));
+    const snapped = snapToSeam(track, frame, tolerance);
+    const clip = clipAtFrame(track, snapped);
+    // 空白处：既不画预览也不落库（与素材拖到空白一致）
+    if (clip === null) return null;
+    const resolved = resolveTransitionTarget(docNow, track, snapped, preset, seconds);
+    // ghost 画多宽：入场只画片段内那一半，淡出画全长（与真实角标同口径）
+    const visualFrames = Math.max(
+      1,
+      Math.round((preset.side === 'in' ? 0.5 : 1) * resolveDuration(seconds, clip, docNow.fpsMilli)),
+    );
+    if ('message' in resolved) {
+      return { clipId: clip.id, side: preset.side, durationFrames: visualFrames, message: resolved.message };
+    }
+    const ops = buildTransitionOps(clip, resolved.side, {
+      type: preset.type,
+      durationFrames: resolved.durationFrames,
+    });
+    return { clipId: clip.id, side: resolved.side, durationFrames: visualFrames, ops };
+  }
+
   function onDragOver(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasTransitionDrag(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      const payload = getDraggingTransition();
+      const target = dropTargetAt(event);
+      if (payload === null || target === null) {
+        store.setTransitionGhost(null);
+        return;
+      }
+      const plan = planForTransitionDrop(payload.presetId, payload.seconds, target.track, target.frame);
+      if (plan === null) {
+        store.setTransitionGhost(null);
+        return;
+      }
+      store.setTransitionGhost({
+        clipId: plan.clipId,
+        side: plan.side,
+        durationFrames: plan.durationFrames,
+        valid: plan.message === undefined,
+        ...(plan.message === undefined ? {} : { reason: plan.message }),
+      });
+      return;
+    }
     if (hasTextDrag(event.dataTransfer)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
@@ -600,7 +692,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onDragLeave(event: React.DragEvent<HTMLCanvasElement>): void {
-    if (!hasAssetDrag(event.dataTransfer) && !hasTextDrag(event.dataTransfer)) return;
+    if (!hasAssetDrag(event.dataTransfer) && !hasTextDrag(event.dataTransfer) && !hasTransitionDrag(event.dataTransfer)) return;
     // 只有真的离开画布才清：在画布内部换轨道时 dragleave 也会触发
     const canvas = canvasRef.current;
     if (canvas !== null) {
@@ -609,9 +701,29 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
       if (clientX > rect.left && clientX < rect.right && clientY > rect.top && clientY < rect.bottom) return;
     }
     store.setDropGhost(null);
+    store.setTransitionGhost(null);
   }
 
   function onDrop(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasTransitionDrag(event.dataTransfer)) {
+      event.preventDefault();
+      const payload = readTransitionDrag(event.dataTransfer) ?? getDraggingTransition();
+      clearDraggingTransition();
+      store.setTransitionGhost(null);
+      if (payload === null) return;
+      const target = dropTargetAt(event);
+      if (target === null) return;
+      const plan = planForTransitionDrop(payload.presetId, payload.seconds, target.track, target.frame);
+      if (plan === null) return;
+      if (plan.message !== undefined || plan.ops === undefined) {
+        store.pushError(makeError('E_INVALID_PROJECT', plan.message ?? '这个位置不能加转场'));
+        return;
+      }
+      // 空数组 = 已经是这个转场了（同类型同时长、另一侧也为空），不发无用撤销步
+      if (plan.ops.length === 0) return;
+      store.dispatch(plan.ops, `拖入转场（${transitionPresetById(payload.presetId)?.name ?? '转场'}）`);
+      return;
+    }
     if (hasTextDrag(event.dataTransfer)) {
       event.preventDefault();
       const presetId = readTextDrag(event.dataTransfer) ?? getDraggingTextId();

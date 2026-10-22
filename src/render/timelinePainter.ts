@@ -50,8 +50,6 @@ import {
   type TimelineLayout,
 } from '../core/trackLayout';
 export const HANDLE_WIDTH = 8;
-/** 转场角标的宽度（px）。 */
-const TRANSITION_MARK_WIDTH = 12;
 /** 片段块内缩略图的最大高度（块高减去上下留白）。 */
 const THUMB_MAX_H = TRACK_HEIGHT - 12;
 
@@ -358,6 +356,12 @@ export function paintTimeline(ctx: CanvasRenderingContext2D, state: TimelinePain
     const dropGhost = ephemeral.dropGhost ?? null;
     if (dropGhost !== null) {
       drawDropGhost(ctx, dropGhost, state, colors);
+    }
+
+    // 拖转场时的落点预览（贴在片段的某一侧，形状与真实转场角标一致但更亮）
+    const transitionGhost = ephemeral.transitionGhost ?? null;
+    if (transitionGhost !== null) {
+      drawTransitionGhost(ctx, transitionGhost, state, colors);
     }
 
     /**
@@ -738,21 +742,34 @@ function drawClip(
   }
   ctx.stroke();
 
-  // 转场角标：左/右边缘画一个半透明楔形，表示这一侧有淡入/淡出
+  /**
+   * 转场角标：左/右边缘画一个半透明楔形。
+   *
+   * **宽度按真实时长等比例**（2026-10-23 之前是固定 12px）：固定宽度下
+   * 0.3 秒和 1.0 秒长得一模一样，用户根本看不出自己设了多长的转场。
+   * 极短的转场（2 帧）给 3px 下限，否则在缩略图上直接看不见。
+   *
+   * 入场的窗口以接缝为中心，**落在本片段内的只有一半**（D/2）；
+   * 淡出完全在片段内部，所以取全长 D。
+   */
+  const markWidth = (frames: number): number =>
+    Math.min(width, Math.max(3, frameToX(frames, doc.zoomLevel)));
   if (clip.transitionIn !== null) {
+    const mark = markWidth(clip.transitionIn.durationFrames / 2);
     ctx.fillStyle = 'rgba(83, 74, 183, 0.28)';
     ctx.beginPath();
     ctx.moveTo(x, y + 2);
-    ctx.lineTo(x + TRANSITION_MARK_WIDTH, y + 2);
+    ctx.lineTo(x + mark, y + 2);
     ctx.lineTo(x, y + height - 2);
     ctx.closePath();
     ctx.fill();
   }
   if (clip.transitionOut !== null) {
+    const mark = markWidth(clip.transitionOut.durationFrames);
     ctx.fillStyle = 'rgba(83, 74, 183, 0.28)';
     ctx.beginPath();
     ctx.moveTo(x + width, y + 2);
-    ctx.lineTo(x + width - TRANSITION_MARK_WIDTH, y + 2);
+    ctx.lineTo(x + width - mark, y + 2);
     ctx.lineTo(x + width, y + height - 2);
     ctx.closePath();
     ctx.fill();
@@ -989,13 +1006,65 @@ function drawDropGhost(
   ctx.restore();
 }
 
+/**
+ * 拖转场时的落点预览：**贴在片段某一侧的加宽楔形** + 一条接缝竖线。
+ *
+ * 为什么不用 `drawDropGhost` 那种"整块半透明矩形"：转场没有自己的时间跨度，
+ * 它表达的是"这条接缝上有一个转场"。画成矩形会让人以为要在那里插一段内容。
+ */
+function drawTransitionGhost(
+  ctx: CanvasRenderingContext2D,
+  ghost: NonNullable<EphemeralState['transitionGhost']>,
+  state: TimelinePaintState,
+  colors: TimelineColors,
+): void {
+  const { doc } = state;
+  const layout = trackLayout(doc);
+  const row = rowOfClip(doc, layout, ghost.clipId);
+  if (row === null) return;
+  const track = doc.tracks.find((item) => item.id === row.trackId);
+  const clip = track?.clips.find((item) => item.id === ghost.clipId);
+  if (clip === undefined) return;
+
+  const box = clipBox(clip, row, doc.zoomLevel, state.scrollX);
+  if (box.x + box.width < 0 || box.x > state.viewport.width) return;
+  const fill = ghost.valid ? colors.ghost : colors.ghostInvalid;
+  const mark = Math.min(box.width, Math.max(6, frameToX(ghost.durationFrames, doc.zoomLevel)));
+
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  if (ghost.side === 'in') {
+    ctx.moveTo(box.x, box.y + 2);
+    ctx.lineTo(box.x + mark, box.y + 2);
+    ctx.lineTo(box.x, box.y + box.height - 2);
+  } else {
+    ctx.moveTo(box.x + box.width, box.y + 2);
+    ctx.lineTo(box.x + box.width - mark, box.y + 2);
+    ctx.lineTo(box.x + box.width, box.y + box.height - 2);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // 接缝竖线：告诉用户"就贴在这一刀上"
+  const seamX = ghost.side === 'in' ? box.x : box.x + box.width;
+  ctx.globalAlpha = 0.95;
+  ctx.strokeStyle = fill;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(seamX + 0.5, box.y);
+  ctx.lineTo(seamX + 0.5, box.y + box.height);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawDragDraft(
   ctx: CanvasRenderingContext2D,
   drag: NonNullable<EphemeralState['drag']>,
   state: TimelinePaintState,
   colors: TimelineColors,
-): void {
-  const { doc } = state;
+): void {  const { doc } = state;
   const row = rowOfClip(doc, trackLayout(doc), drag.clipId);
   const ghostX = frameToX(drag.startFrame, doc.zoomLevel) - state.scrollX;
   const ghostW = Math.max(1, frameToX(drag.durationFrames, doc.zoomLevel));

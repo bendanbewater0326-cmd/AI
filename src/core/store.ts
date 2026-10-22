@@ -22,6 +22,7 @@ import type {
   DragDraft,
   DropGhost,
   TrackDrag,
+  TransitionGhost,
   EphemeralState,
   Frame,
   MilliFps,
@@ -139,6 +140,8 @@ export interface ProjectStore {
   setSnapEnabled(enabled: boolean): void;
   /** 拖入落点预览（null = 清掉）。**只在值真的变了才通知**，否则拖拽时每秒几十次重绘。 */
   setDropGhost(ghost: DropGhost | null): void;
+  /** 拖转场时的落点预览（null = 清掉）。与 `setDropGhost` 同一套"值不变不通知"。 */
+  setTransitionGhost(ghost: TransitionGhost | null): void;
   /** 轨道排序拖拽预览（null = 没在拖）。同样只在值变了才通知。 */
   setTrackDrag(drag: TrackDrag | null): void;
   /**
@@ -341,6 +344,7 @@ const EMPTY_EPHEMERAL: EphemeralState = {
   errors: [],
   snapEnabled: true,
   dropGhost: null,
+  transitionGhost: null,
   trackDrag: null,
 };
 
@@ -618,6 +622,24 @@ export function createStore(initialDoc?: Project): ProjectStore {
         return;
       }
       ephemeral = { ...ephemeral, dropGhost: ghost };
+      notify();
+    },
+
+    setTransitionGhost(ghost: TransitionGhost | null): void {
+      const previous = ephemeral.transitionGhost;
+      if (previous === ghost) return;
+      if (
+        previous !== null &&
+        ghost !== null &&
+        previous.clipId === ghost.clipId &&
+        previous.side === ghost.side &&
+        previous.durationFrames === ghost.durationFrames &&
+        previous.valid === ghost.valid
+      ) {
+        // 落点没变：只更新 reason（避免每帧都 notify）
+        return;
+      }
+      ephemeral = { ...ephemeral, transitionGhost: ghost };
       notify();
     },
 

@@ -104,3 +104,65 @@ export function readTextDrag(dataTransfer: DataTransfer | null): string | null {
   const prefix = 'veditor-text:';
   return fallback.startsWith(prefix) ? fallback.slice(prefix.length) : null;
 }
+
+/* ================= 转场预设（左栏「转场」→ 时间线） ================= */
+
+/**
+ * 转场的 MIME。
+ *
+ * 与前两种又不一样：转场**没有自己的时间跨度**，它是"贴在某个片段某一侧"的属性，
+ * 落点要先换算成"接缝附近的片段"。所以必须单独一个 MIME。
+ */
+export const TRANSITION_MIME = 'application/x-veditor-transition';
+
+export interface TransitionDragPayload {
+  presetId: string;
+  /** 面板上当前选的时长（秒）。**拖拽时一起带过来**，否则落库用的是旧值。 */
+  seconds: number;
+}
+
+let draggingTransition: TransitionDragPayload | null = null;
+
+export function getDraggingTransition(): TransitionDragPayload | null {
+  return draggingTransition;
+}
+
+export function clearDraggingTransition(): void {
+  draggingTransition = null;
+}
+
+/** 拖起一张转场卡。 */
+export function setTransitionDrag(
+  dataTransfer: DataTransfer | null,
+  presetId: string,
+  seconds: number,
+): void {
+  draggingTransition = { presetId, seconds };
+  if (dataTransfer === null) return;
+  const raw = `${presetId}|${seconds}`;
+  dataTransfer.setData(TRANSITION_MIME, raw);
+  dataTransfer.setData('text/plain', `veditor-transition:${raw}`);
+  dataTransfer.effectAllowed = 'copy';
+}
+
+export function hasTransitionDrag(dataTransfer: DataTransfer | null): boolean {
+  if (dataTransfer === null) return false;
+  return Array.from(dataTransfer.types).includes(TRANSITION_MIME);
+}
+
+/** 解析 `预设id|秒`（坏数据返回 null，不让一次拖拽把面板状态带崩）。 */
+function parseTransition(raw: string): TransitionDragPayload | null {
+  const [presetId, secondsText] = raw.split('|');
+  if (presetId === undefined || presetId === '') return null;
+  const seconds = Number.parseFloat(secondsText ?? '');
+  return { presetId, seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : 0.5 };
+}
+
+export function readTransitionDrag(dataTransfer: DataTransfer | null): TransitionDragPayload | null {
+  if (dataTransfer === null) return null;
+  const direct = dataTransfer.getData(TRANSITION_MIME);
+  if (direct !== '') return parseTransition(direct);
+  const fallback = dataTransfer.getData('text/plain');
+  const prefix = 'veditor-transition:';
+  return fallback.startsWith(prefix) ? parseTransition(fallback.slice(prefix.length)) : null;
+}

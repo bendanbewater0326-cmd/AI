@@ -40,6 +40,7 @@ import {
 } from '../core/transitionTarget';
 import type { TransitionTarget } from '../core/transitionTarget';
 import { store, useDoc, useSelection } from '../core/store';
+import { clearDraggingTransition, setTransitionDrag } from './dnd';
 
 /** 缩略图：纯 DOM 画（不用 canvas、不用渐变 —— 渐变会破坏"极简无渐变"的既有约束）。 */
 function Preview({ kind }: { kind: TransitionPreset['preview'] }): ReactElement {
@@ -181,9 +182,13 @@ export function TransitionPanel(): ReactElement {
             data-preset-id={preset.id}
             data-active={preset.type === activeType}
             aria-pressed={preset.type === activeType}
-            aria-label={`${preset.name}（点击应用）`}
+            aria-label={`${preset.name}（点击应用，或拖到时间线）`}
             title={preset.hint}
             onClick={() => applyPreset(preset)}
+            /* 拖到时间线：独立 MIME，落点先做接缝吸附再判能不能落 */
+            draggable
+            onDragStart={(event) => setTransitionDrag(event.dataTransfer, preset.id, seconds)}
+            onDragEnd={clearDraggingTransition}
           >
             <Preview kind={preset.preview} />
             <span className="v-trscard__name">{preset.name}</span>
@@ -192,7 +197,7 @@ export function TransitionPanel(): ReactElement {
       </div>
 
       <p className="v-transitionpanel__hint" data-v="transition-hint">
-        选中片段后点击应用（叠化需要左边紧挨着一段素材）
+        选中片段后点击应用，或拖到片段/接缝上（叠化需要左边紧挨着一段素材）
       </p>
     </div>
   );

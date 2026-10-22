@@ -64,6 +64,25 @@ export interface TransitionTarget {
 }
 
 /**
+ * 把落点吸附到附近的**接缝**（某个片段的起点）。
+ *
+ * 为什么拖拽需要它：叠化/淡入要挂在**右侧**片段的入点，而鼠标稍微偏左一点点，
+ * `clipAtFrame` 就会命中左边那段 —— 叠化会去找左段的左邻，很可能直接判"不可用"。
+ * 吸附一下，用户"大概放在接缝上"就能落对。
+ *
+ * 容差由调用方按像素换算成帧（时间线用 12px / zoom）。
+ */
+export function snapToSeam(track: Track, frame: Frame, toleranceFrames: Frame): Frame {
+  let best: Frame | null = null;
+  for (const clip of track.clips) {
+    const delta = Math.abs(clip.startFrame - frame);
+    if (delta > toleranceFrames) continue;
+    if (best === null || delta < Math.abs(best - frame)) best = clip.startFrame;
+  }
+  return best ?? frame;
+}
+
+/**
  * 落点 → 转场目标（带可读原因）。
  *
  * `frame` 是落点帧：点击场景传播放头，拖拽场景传鼠标换算的帧。

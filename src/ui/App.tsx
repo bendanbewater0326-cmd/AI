@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Asset, DropGhost, Project, TrackDrag } from '../core/types';
+import type { Asset, DropGhost, Project, TrackDrag, TransitionGhost } from '../core/types';
 import { installKeymap } from '../core/keymap';
 import { store, useDoc, useErrors, useFrame, useSelection } from '../core/store';
 import { trackLayout } from '../core/trackLayout';
@@ -166,6 +166,8 @@ interface VeditorTestHooks {
   zoomLevel: () => number;
   /** 拖拽落点预览（null = 没有在拖）。 */
   dropGhost: () => DropGhost | null;
+  /** 拖转场时的落点预览（null = 没在拖转场）。 */
+  transitionGhost: () => TransitionGhost | null;
   /** 轨道排序拖拽预览（null = 没在拖）。 */
   trackDrag: () => TrackDrag | null;
   /**
@@ -1121,6 +1123,7 @@ export function App(): ReactElement {
       zoomLevel: () => store.getDoc().zoomLevel,
       // 拖拽落点预览（E2E 断言"看到的就是落到的"）
       dropGhost: () => store.getEphemeral().dropGhost,
+      transitionGhost: () => store.getEphemeral().transitionGhost,
       /** 轨道排序拖拽预览（null = 没在拖）。 */
       trackDrag: () => store.getEphemeral().trackDrag,
       /**

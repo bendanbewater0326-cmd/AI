@@ -265,6 +265,156 @@ try {
     `⑫ 短片段 ${short?.durationFrames} 帧上 1.0s 被夹到 ${shortCap} 帧（实测 ${trs(shortAfter).in?.durationFrames}）`,
     trs(shortAfter).in?.durationFrames === shortCap && shortCap < framesOf(1),
   );
+
+  // ---- ⑬ 拖「叠化」到接缝附近（偏左 4px）→ 吸附到接缝、落到右侧片段 ----
+  /**
+   * 模拟完整拖拽：卡片 dragstart → 画布 dragover（读 ghost）→ drop。
+   * 落点故意放在接缝**左边 4px**：不吸附的话 `clipAtFrame` 会命中左边那段，
+   * 而左段没有左邻 → 叠化会被判不可用。吸附正确才能落到右段。
+   */
+  const dragPoint = async (frame, dxPx = 0, trackId = 'trk_V1') =>
+    JSON.parse(
+      await page.session.evaluate(`(() => {
+        const canvas = document.querySelector('[data-v="timeline-canvas"]');
+        const layout = window.__VEDITOR_TEST__.timelineLayout();
+        const row = layout.rows.find((item) => item.trackId === '${trackId}');
+        const zoom = window.__VEDITOR_TEST__.zoomLevel();
+        const scrollX = Number(canvas.dataset['scrollX'] ?? '0');
+        const rect = canvas.getBoundingClientRect();
+        return JSON.stringify({
+          x: rect.left + layout.headerWidth + ${frame} * zoom - scrollX + ${dxPx},
+          y: rect.top + row.top + row.height / 2,
+        });
+      })()`),
+    );
+  const dragTransition = async (point, presetId) =>
+    JSON.parse(
+      await page.session.evaluate(`(() => {
+        const canvas = document.querySelector('[data-v="timeline-canvas"]');
+        const card = document.querySelector('[data-v="transition-preset"][data-preset-id="${presetId}"]');
+        const dt = new DataTransfer();
+        const make = (type, target) => {
+          const event = new DragEvent(type, {
+            bubbles: true, cancelable: true, dataTransfer: dt,
+            clientX: ${point.x}, clientY: ${point.y},
+          });
+          target.dispatchEvent(event);
+          return event;
+        };
+        if (card) make('dragstart', card);
+        const over = make('dragover', canvas);
+        const ghost = window.__VEDITOR_TEST__.transitionGhost();
+        make('drop', canvas);
+        return JSON.stringify({ prevented: over.defaultPrevented, ghost });
+      })()`),
+    );
+
+  const seamClip = (await clips()).find((clip) => clip.startFrame === 20);
+  const beforeDragTrs = JSON.stringify(await clipById(seamClip.id));
+  const dragResult = await dragTransition(await dragPoint(20, -4), 'trs-dissolve');
+  await sleep(500);
+  const afterDragTrs = await clipById(seamClip.id);
+  report.check(
+    `⑬ 拖到接缝左 4px → 吸附并落到右段（in=${trs(afterDragTrs).in?.type}，ghost valid=${dragResult.ghost?.valid}）`,
+    dragResult.prevented === true &&
+      dragResult.ghost?.clipId === seamClip.id &&
+      dragResult.ghost?.valid === true &&
+      trs(afterDragTrs).in?.type === 'crossDissolve',
+  );
+  report.check(
+    `⑬b 落点预览的形状与真实角标一致（side=${dragResult.ghost?.side}，宽度 ${dragResult.ghost?.durationFrames} 帧）`,
+    dragResult.ghost?.side === 'in' && Number(dragResult.ghost?.durationFrames) > 0 && beforeDragTrs !== JSON.stringify(afterDragTrs),
+  );
+
+  // ---- ⑭ 拖到没有左邻的片段中部 → 红色预览 + 可读原因 + 文档不变 ----
+  const loneClip = (await clips()).find((clip) => clip.startFrame === 0);
+  const beforeInvalid = JSON.stringify(await clipById(loneClip.id));
+  const invalidResult = await dragTransition(await dragPoint(10), 'trs-dissolve');
+  await sleep(400);
+  const afterInvalid = JSON.stringify(await clipById(loneClip.id));
+  report.check(
+    `⑭ 无左邻时预览变红（valid=${invalidResult.ghost?.valid}，原因「${invalidResult.ghost?.reason ?? '（无）'}」）且文档未变`,
+    invalidResult.ghost?.valid === false &&
+      String(invalidResult.ghost?.reason ?? '').includes('左侧') &&
+      beforeInvalid === afterInvalid,
+  );
+
+  // ---- ⑮ 拖到空白区 → 不画预览、不落库、不报错 ----
+  const emptyResult = await dragTransition(await dragPoint(400), 'trs-fade-in');
+  await sleep(300);
+  const afterEmpty = await clips();
+  report.check(
+    `⑮ 拖到空白区什么都不发生（ghost=${emptyResult.ghost === null ? 'null' : '有值'}，片段数 ${afterEmpty.length}）`,
+    emptyResult.ghost === null && afterEmpty.length === 3,
+  );
+
+  // ---- ⑯ 时间线角标宽度按真实时长变化（读画布像素）----
+  /**
+   * 直接量"紫色楔形占了多宽"：楔形从片段左端向右铺开，宽度 = D/2 × zoom。
+   * 只断言 `durationFrames` 是测不出"画得对不对"的 —— 之前那个固定 12px 的版本
+   * 数据完全正确、视觉上毫无区别。
+   */
+  /**
+   * 把片段左端那一行像素的**亮度**取回来（160 个采样点）。
+   *
+   * 为什么不用"数紫色像素"：视频片段本身底色就是淡紫 `--v-clip: #d9d7f0`，
+   * 楔形只是同色系加深 —— 按颜色筛会把整块片段都算进去（实测两档都是满格 159px）。
+   * 改成"两次渲染逐点做差、看差异延伸到多远"，就与底色无关了。
+   */
+  const captureRow = async (clipId) =>
+    JSON.parse(
+      await page.session.evaluate(`(() => {
+        const canvas = document.querySelector('[data-v="timeline-canvas"]');
+        const layout = window.__VEDITOR_TEST__.timelineLayout();
+        const clip = window.__VEDITOR_TEST__.clips().find((item) => item.id === ${JSON.stringify(clipId)});
+        if (!clip) return JSON.stringify([]);
+        const row = layout.rows.find((item) => item.trackId === clip.trackId);
+        const zoom = window.__VEDITOR_TEST__.zoomLevel();
+        const rect = canvas.getBoundingClientRect();
+        const scale = canvas.width / Math.max(1, rect.width);
+        const scrollX = Number(canvas.dataset['scrollX'] ?? '0');
+        const startX = Math.round((layout.headerWidth + clip.startFrame * zoom - scrollX) * scale);
+        const y = Math.round((row.top + 4) * scale);
+        const width = Math.round(160 * scale);
+        const ctx = canvas.getContext('2d');
+        const data = ctx.getImageData(Math.max(0, startX), y, width, 1).data;
+        const out = [];
+        for (let i = 0; i + 3 < data.length; i += 4) {
+          out.push(Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]));
+        }
+        return JSON.stringify(out);
+      })()`),
+    );
+  /** 两次渲染的差异延伸到第几个采样点（= 角标宽度差了多少 px）。 */
+  const diffExtent = (left, right) => {
+    let furthest = 0;
+    for (let i = 0; i < Math.min(left.length, right.length); i += 1) {
+      if (Math.abs(left[i] - right[i]) > 2) furthest = i;
+    }
+    return furthest;
+  };
+
+  await page.session.evaluate(`window.__VEDITOR_TEST__.selectClip(${JSON.stringify(seamClip.id)})`);
+  await sleep(200);
+  await click('[data-v="transition-duration-0.3"]');
+  await click('[data-v="transition-preset"][data-preset-id="trs-fade-in"]');
+  await page.session.evaluate('window.__VEDITOR_TEST__.selectClip(null)');
+  await sleep(500);
+  const rowNarrow = await captureRow(seamClip.id);
+
+  await page.session.evaluate(`window.__VEDITOR_TEST__.selectClip(${JSON.stringify(seamClip.id)})`);
+  await sleep(200);
+  await click('[data-v="transition-duration-1"]');
+  await click('[data-v="transition-preset"][data-preset-id="trs-fade-in"]');
+  await page.session.evaluate('window.__VEDITOR_TEST__.selectClip(null)');
+  await sleep(500);
+  const rowWide = await captureRow(seamClip.id);
+  const wideClip = await clipById(seamClip.id);
+  const extent = diffExtent(rowNarrow, rowWide);
+  report.check(
+    `⑯ 角标宽度按时长变化（0.3s → 1.0s 的差异延伸到 ${extent}px，转场 ${trs(wideClip).in?.durationFrames} 帧）`,
+    extent >= 8 && extent <= 120,
+  );
 } finally {
   report.summary('转场面板：3 种转场 / 时长档位 / 两侧互斥 / 左邻判定 / 像素验证');
   await page.close();

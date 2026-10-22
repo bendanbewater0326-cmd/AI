@@ -110,8 +110,9 @@ async function inspectAt(timecode) {
   // 解码是异步的：seek 之后要等合成器真的画出这一帧。
   // 12×200ms（2.4s）在**全量 E2E 连跑**时不够——机器被前面的脚本压着，
   // 会拍到一帧全黑，看起来像"转场把画面搞黑了"（实测 42 个脚本连跑时必现，单跑不复现）。
-  // 放宽到 25×200ms（5s）：真黑屏 bug 仍然会失败，只是慢一点。
-  for (let i = 0; i < 25; i += 1) {
+  // 放宽到 25×200ms（5s）后仍然偶发（2026-10-23：60 个脚本跑 19.2 分钟那次拍到了 0），
+  // 再加到 40×200ms（8s）：真黑屏 bug 仍然会失败，只是慢一点。
+  for (let i = 0; i < 40; i += 1) {
     snapshot = await page.session.evaluate('window.__VEDITOR_TEST__.previewSnapshot()');
     if ((snapshot?.nonBlack ?? 0) > 1000) break;
     await new Promise((resolve) => setTimeout(resolve, 200));
