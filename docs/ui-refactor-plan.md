@@ -242,12 +242,19 @@ verify-touch-a11y.mjs      # 断言"时间线可视区在视口内"
 
 **验收**：`tests/verify-left-tabs.mjs` 22 项（顺序/中文/44px 在 25% 内/占位可点/切回不丢/刷新记忆/折叠归零/820px 收窄）。
 
-### S1.4 时间轴 50% + 可拖
+### S1.4 时间轴 50% + 可拖 ✅ 已落地 2026-10-23
 
-- `v-workspace` 的 `grid-template-rows` 从 `1fr 220px` 改成 `var(--v-main-pct) 1fr`
-- 复用现有的 `.v-timeline__splitter`（已经能拖），改成百分比语义
+- `v-workspace` 的 `grid-template-rows`：`minmax(0,1fr) var(--v-splitter-h) var(--v-timeline-h)`
+- 高度语义：`--v-timeline-pct`（**无单位**，默认 50，可拖 15–70）+ 派生的 `--v-timeline-h`
+  （`calc((100vh - 顶栏) * pct / 100)`）—— 后者必须保持"长度"，
+  否则预览的 `calc(100vh - … - 50%)` 会在 width 语境下算错
+- 复用 `ui/splitter.tsx`（抽成三面板共用，`PANELS` 表描述轴/方向/范围），
+  删掉原来那个**从未接过事件**的 `.v-timeline__splitter` 占位
+- 记忆：`veditor:timelinePct`；**没拖过就不写行内变量**（同 S1.2 的媒体查询教训）
+- 时间线**不提供折叠**（归零后没有替代入口）
 
-**验收**：默认 50/50；拖到 15% / 70% 边界停住；`verify-t15` 的 100 片段重绘仍 < 3ms。
+**验收**：`tests/verify-timeline-height.mjs` 16 项（50% 基准是工作区 / 4px 热区在边界 /
+clamp 15%/70% / 刷新记忆 / 无行内污染 / 片段数与 16:9 不变）。
 
 ### S1.5 预览控制栏叠到画面底部居中
 

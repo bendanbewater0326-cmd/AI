@@ -13,7 +13,20 @@
   --v-right-w: 25%;
   --v-splitter-w: 4px;
   --v-ctrlbar-h: 36px;
-  --v-timeline-h: 220px;
+  /* 时间线高度：**百分比**（占工作区高度 = 视口 − 顶栏），默认 50%、可拖 15%–70%（S1.4） */
+  --v-timeline-pct: 50;
+  /*
+   * 派生出的像素高度。三处共用：grid 行高、预览 16:9 的宽度计算、命令栏/toast 的 bottom 偏移。
+   *
+   * **必须保持"长度"语义**：如果直接把 `--v-timeline-h` 定义成 `50%`，那么
+   * `calc(100vh - 48px - 36px - 50% - 24px)` 里的 50% 会按**宽度**解析（width 语境），
+   * 预览尺寸会算成一个莫名其妙的数。所以百分比只存在 `--v-timeline-pct`（无单位），
+   * 长度在这里算一次。
+   *
+   * 注意：这里用 `100vh` 是既有约定（预览尺寸本来就这么算）。宿主把 `<veditor-panel>`
+   * 塞进矮容器时，整条百分比高度链本来就不成立，见 `.v-stage__screen` 的注释。
+   */
+  --v-timeline-h: calc((100vh - var(--v-topbar-h)) * var(--v-timeline-pct) / 100);
   --v-timeline-min-h: 160px;
   --v-tl-toolbar-h: 28px;
   --v-tl-ruler-h: 24px;
@@ -140,13 +153,30 @@ select:focus-visible,
   min-height: 0;
 }
 
-/* 工作区：错误条以绝对定位覆盖（不改变四区尺寸）+ 中列 + 时间线 */
+/* 工作区：错误条以绝对定位覆盖（不改变四区尺寸）+ 中列 + 分隔条 + 时间线 */
 .v-workspace {
   position: relative;
   min-height: 0;
   flex: 1 1 auto;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) var(--v-timeline-h);
+  grid-template-rows: minmax(0, 1fr) var(--v-splitter-h) var(--v-timeline-h);
+}
+
+/*
+ * 三行全部显式指定行号（S1.2 的同一课：别依赖自动放置）。
+ * 绝对定位的 `.v-errorbar` 不参与流，但将来任何"条件渲染"的子项都会把
+ * 自动放置挤错一格 —— 那时症状是"时间线跑到预览的位置"，极难归因。
+ */
+.v-workspace > .v-body {
+  grid-row: 1;
+}
+
+.v-workspace > .v-splitter--timeline {
+  grid-row: 2;
+}
+
+.v-workspace > .v-timeline {
+  grid-row: 3;
 }
 
 /* 顶栏 32px */
@@ -550,9 +580,18 @@ select:focus-visible,
   background: var(--v-accent);
 }
 
+/* 时间线那条是横的：同一个组件、同样的 4px 热区，只是轴不同（S1.4） */
+.v-splitter--timeline {
+  cursor: row-resize;
+}
+
 body.v-splitter-dragging {
   cursor: col-resize;
   user-select: none;
+}
+
+body.v-splitter-dragging--y {
+  cursor: row-resize;
 }
 
 /**
@@ -827,7 +866,7 @@ body.v-splitter-dragging {
      和 ResizeObserver 写 CSS 变量，都没能解决——真正的阻塞点在 `.v-app` 的
      `height: 100%` 于 shadow DOM 里失效（计算值 1233px，而非父容器的 600px）。
      现状：**全屏使用正常**；宿主集成时需给容器足够高度（或自行修正百分比高度链）。 */
-  width: min(100%, calc((100vh - var(--v-topbar-h) - var(--v-ctrlbar-h) - var(--v-timeline-h) - 24px) * 16 / 9));
+  width: min(100%, calc((100vh - var(--v-topbar-h) - var(--v-ctrlbar-h) - var(--v-timeline-h) - var(--v-splitter-h) - 24px) * 16 / 9));
   background: #000;
   border: 0.5px solid var(--v-border);
   border-radius: 2px;
@@ -920,7 +959,7 @@ body.v-splitter-dragging {
   accent-color: var(--v-accent);
 }
 
-/* 底部时间线 220px */
+/* 底部时间线：高度 = 工作区 × --v-timeline-pct（S1.4，默认 50%） */
 .v-timeline {
   position: relative;
   height: var(--v-timeline-h);
@@ -929,16 +968,6 @@ body.v-splitter-dragging {
   border-top: 0.5px solid var(--v-border);
   background: var(--v-bg);
   min-height: 0;
-}
-
-.v-timeline__splitter {
-  position: absolute;
-  top: calc(var(--v-splitter-h) * -1);
-  left: 0;
-  right: 0;
-  height: var(--v-splitter-h);
-  cursor: row-resize;
-  background: transparent;
 }
 
 /* 时间线画布：跨 ruler + tracks 两行（grid-row 2/4），内部 = 标尺 24 + 轨 × 56 */
@@ -1300,10 +1329,6 @@ body.v-track-dragging .v-track-head {
 }
 .v-tl-add-track-row:hover { color: var(--v-accent); background: var(--v-accent-weak); }
 
-.v-timeline__splitter:hover {
-  background: var(--v-accent-weak);
-}
-
 .v-tl-toolbar {
   height: var(--v-tl-toolbar-h);
   display: flex;
@@ -1558,7 +1583,7 @@ body.v-track-dragging .v-track-head {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: var(--v-timeline-h);
+  bottom: calc(var(--v-timeline-h) + var(--v-splitter-h));
   z-index: var(--v-z-commandbar);
   display: flex;
   flex-direction: column;
@@ -1660,7 +1685,7 @@ body.v-track-dragging .v-track-head {
 .v-toast {
   position: absolute;
   left: 50%;
-  bottom: calc(var(--v-timeline-h) + 12px);
+  bottom: calc(var(--v-timeline-h) + var(--v-splitter-h) + 12px);
   transform: translateX(-50%);
   z-index: var(--v-z-commandbar);
   display: flex;

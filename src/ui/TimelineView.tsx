@@ -1092,7 +1092,6 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
 
   return (
     <section className="v-timeline" data-v="timeline" aria-label="时间线" ref={sectionRef}>
-      <div className="v-timeline__splitter" data-v="timeline-splitter" role="separator" aria-hidden="true" />
       <div className="v-tl-toolbar" data-v="timeline-toolbar">
         <span>时间线</span>
         <span className="v-tl-toolbar__spacer" />

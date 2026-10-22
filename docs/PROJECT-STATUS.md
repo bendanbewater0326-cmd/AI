@@ -51,8 +51,8 @@
 | 批次增强 | A（音频·导出·UI）/ B（M4 AI）/ C1（文字·调色·音量）/ C2（转场·入出点）/ C3（变速·关键帧·剪贴板）全部交付 | — |
 | 源码 | **83 个 ts/tsx**（+ `app.css` = 84 文件 / 33540 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
 | 单测 | **576 条 / 35 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
-| E2E | **56 个 `verify-*.mjs`**（55 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建产物 | `dist/main.js` **640.6KB**（esbuild 单包） | `npm run build` |
+| E2E | **57 个 `verify-*.mjs`**（56 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建产物 | `dist/main.js` **641.5KB**（esbuild 单包） | `npm run build` |
 | 时基静态检查 | **扫描 84 个文件，0 处非法换算** | `npm run check` |
 
 > 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存。
@@ -1861,6 +1861,56 @@ S1.0 的钩子、S1.1 的顶栏都只是"不挡路"。这一轮才是真正把�
 
 ---
 
+### 3.29 2026-10-23 · UI 重构 S1.4：时间线高度 50%（15%–70% 可拖）
+
+**目标**：时间线从固定 220px 改成"占工作区 50%"，与左右栏一样可拖、可记忆，
+**只动布局层**，时间线渲染/素材/业务逻辑零改动。
+
+```
+.v-workspace {
+  grid-template-rows: minmax(0,1fr) var(--v-splitter-h) var(--v-timeline-h);
+}
+--v-timeline-pct: 50;                       ← 唯一真相（无单位）
+--v-timeline-h: calc((100vh - var(--v-topbar-h)) * var(--v-timeline-pct) / 100);
+```
+
+**关键决定：百分比只存在无单位变量里**
+
+`--v-timeline-h` 有三类消费者：grid 行高、预览 16:9 的宽度计算、命令栏/toast 的
+`bottom` 偏移。后两者要求它是**长度**。如果直接把它定义成 `50%`，
+`calc(100vh - 48px - 36px - 50% - 24px)` 里的 50% 会按**宽度**解析（width 语境），
+预览尺寸直接算错。所以拆成 `--v-timeline-pct`（50）+ `--v-timeline-h`（派生长度），
+只在这里换算一次。
+
+**分隔条复用**：`ui/splitter.tsx` 抽成三面板共用（`PANELS` 表：轴 / 变量名 / 存储键 /
+方向 sign / min-max）。时间线是 y 轴、`sign = -1`（往上拖变大）、范围 15–70、无折叠按钮
+（高度归零后没有任何替代入口）。热区仍是 4px，与左右栏一致；拖拽时 `body` 加
+`v-splitter-dragging--y` 把光标切成 `row-resize`。
+
+顺带删掉了 `TimelineView` 里那个**从未接过事件**的 `.v-timeline__splitter` 占位
+（`aria-hidden` 的空 div，一直是死代码），改成 `.v-workspace` 的第 2 行真分隔条。
+三行都显式写了 `grid-row`（S1.2 的同一课，别依赖自动放置）。
+
+**踩到的坑（预防性）**
+
+- `--v-timeline-h` 是 calc 后，`uiLayout().vars.timelineH` 读出来是
+  `calc((100vh - 48px) * 50 / 100)` 而不是 `363px` —— 任何"读变量做数值断言"的测试
+  都会踩空。测试一律读 `uiLayout().timeline.h` 的实际像素。
+- 15% 时时间线只有 109px（工具栏 28 + 标尺 24 = 52，剩 57px 不够一条 60px 视频轨），
+  轨道区靠 `.v-tl-scroll` 滚动，属于预期行为，不是裁切。
+
+**验证**：`tests/verify-timeline-height.mjs` 16 项全绿，其中三条是核心：
+
+```
+① 默认 363 / 726 = 50.0%（基准是"视口 − 顶栏"，不是视口）
+②b 分隔条顶 407 = 预览底 407（正好在边界，不是差 4px）
+⑧ 清掉记忆后回到 50%，且根节点**没有**行内 --v-timeline-pct
+```
+
+**数字**：E2E 57 个、构建 641.5KB（+0.9KB）。
+
+---
+
 ## 4. 技术栈
 
 | 层 | 技术 |
@@ -1900,7 +1950,7 @@ src/
   ui/         App, TopBar, LeftPanel(左栏 44px 图标条 + 9 Tab), AssetPanel(素材 Tab 内容),
               TimelineView, InspectorPanel, CommandBar, ExportDialog, Toast,
               ContextMenu(自绘右键菜单), SelfCheck(应用内自检), timelineController,
-              theme, splitter(三栏拖拽/折叠), CacheDialog(缓存池管理)
+              theme, splitter(左/右/时间线 三面板共用：轴 + clamp + 记忆), CacheDialog(缓存池管理)
   host/       host(挂载入口：?src= / veditor-panel / postMessage),
               commands(命令分发), projectInput(工程归一化)
   ai/         context, intents, provider, registry, tone, cloudLLM,
@@ -1983,7 +2033,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `draft-cache` | 草稿缓存池（指纹去重 / 并发 2 / 清理未使用） | 11 |
 | **合计** | | **576** |
 
-### E2E 脚本（`tests/verify-*.mjs`，56 个）
+### E2E 脚本（`tests/verify-*.mjs`，57 个）
 
 | 脚本 | 覆盖 |
 |---|---|
@@ -2021,6 +2071,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `s5-p0` | **S5 P0**：裁剪吸附（拖与松手同一函数）/ Ctrl 加选 / 多选批量删除一步撤销 / 拖出轨道区回弹并提示 |
 | `layout` | **S1.2 三栏**：默认 25/50/25、拖拽 clamp 15%–40%、左右折叠、刷新记忆、窄屏 16%（**必须真刷新**才测得到挂载逻辑） |
 | `left-tabs` | **S1.3 左栏**：44px 图标条**算在 25% 之内**（内容区 = 左栏 − 44）、9 个中文 Tab 顺序与 title、未实现 Tab 可点且给「功能开发中」、切走再回来素材不丢、刷新记住 Tab、折叠后图标条一起归零、820px 同步收窄 |
+| `timeline-height` | **S1.4 时间线高度**：默认占**工作区**（视口 − 顶栏）50%、4px 热区正好压在预览/时间线边界且 `elementFromPoint` 命中自身、拖拽 clamp 15%/70%、刷新记忆、没拖过时**不写行内变量**、拖完片段数与 16:9 预览不变 |
 | `audio-controls` | 音量滑块立即生效（不用等松手）+ 轨道闸门真的到了音频链路 |
 | `audio-menu` | 右键音频菜单 7 项，导出产物用 `Browser.setDownloadBehavior` 落盘校验文件头 |
 | `transform` | 旋转 90° / 水平垂直翻转 / 定格 / 倒放 |
@@ -2544,6 +2595,12 @@ D:/项目专用文件夹/剪辑工具/
 - **"算在里面"还是"加在外面"必须用像素断言**：S1.3 的 44px 图标条如果写成
   "25% + 44px"，1440 下只多占 3%，肉眼完全看不出，但中间预览区被永久挤压。
   正确断言是 `内容区宽 = 左栏宽 − 44`（差值 0），不是"图标条宽 44"。
+- **百分比只能存在"无单位变量"里，长度派生一次**：`--v-timeline-pct: 50` +
+  `--v-timeline-h: calc((100vh - var(--v-topbar-h)) * var(--v-timeline-pct) / 100)`。
+  若把 `--v-timeline-h` 直接定义成 `50%`，它在 `width: calc(100vh - … - 50%)` 里会按
+  **宽度**解析（属性语境决定百分比基准），预览尺寸静默算错 —— 不报错、不崩，只是"看起来有点小"。
+- **`calc()` 之后别用 `getPropertyValue` 做数值断言**：自定义属性的计算值是
+  `calc((100vh - 48px) * 50 / 100)` 这串 token，不是 `363px`。测试要读元素实际 rect。
 - **规格的每个数学公式都要有反例用例**：证明它不能被等价替换（时基 13.5% 相位错的教训）。
 - **生死线断言必须有独立验证路径**（不共享代码）：如用 BigInt 独立实现 spec 公式做对拍。
 
@@ -2631,11 +2688,13 @@ D:/项目专用文件夹/剪辑工具/
 | **2026-10-22（UI 重构 S1.0 + S1.1）** | 布局钩子 + 顶栏 48px | 对标 opencut-classic web 编辑器；新增 `uiLayout()` 钩子，`verify-t11` 的 5 条硬编码尺寸断言改成 8 条结构性断言（范围同时容纳 110px 与 25%）；顶栏加撤销/重做/分割，主题/缓存/构建时间收进「工程」下拉 |
 | **2026-10-22（UI 重构 S1.2）** | 三栏百分比 + 拖拽 + 折叠 | 25/50/25 + 4px 分隔条（15%–40% clamp）+ 左右一键折叠 + localStorage 记忆；**三个 E2E 抓出来的真 bug**：折叠按钮盖住分隔条、折叠左栏后预览变 4px（grid 自动放置挤位）、窄屏媒体查询被行内样式盖成死代码；16 项 E2E（`verify-layout`），全量 55/55 |
 | **2026-10-22（UI 重构 S1.3）** | 左栏 44px 图标条 + 9 个中文 Tab | 图标条**算在 25% 之内**（A 方案）：素材/音频/文本/贴纸/特效/转场/字幕/调节/设置；未实现 Tab 不置灰、点开给「功能开发中」；素材面板常驻挂载只 `hidden`（卸载会丢导入/缩略图/file input）；`[hidden]` 被 `display:flex` 盖掉的坑；820px 图标条 40 + 缩略图 64 同步收窄；22 项 E2E（`verify-left-tabs`） |
+| **2026-10-23（UI 重构 S1.4）** | 时间线高度 50%（15%–70% 可拖） | `--v-timeline-pct`（无单位）+ `--v-timeline-h`（派生长度）分离——否则 `calc(100vh - … - 50%)` 会在 width 语境下算错；`splitter` 抽成三面板共用（轴/sign/范围收进 `PANELS` 表）；删掉从未接过事件的 `.v-timeline__splitter` 死代码；`.v-workspace` 三行显式 `grid-row`；16 项 E2E（`verify-timeline-height`） |
 
 **当前**：**P0 + P1 + P2 共 64 条全部落地**（4 条为"部分交付"，口径见 §7.1）；postMessage 命令通道已实现（§7.2）。
 需求层面已经没有新功能要补；当前在做的是一条**独立的 UI 重构线**（对标 opencut-classic，
-见 `docs/ui-refactor-plan.md`）：S1.0 布局钩子 / S1.1 顶栏 48px / S1.2 三栏百分比 / **S1.3 左栏 9 图标 Tab 已完成**，
-**S1.4 时间轴 50% → S1.5 控制栏叠画面底部** 待做。
+见 `docs/ui-refactor-plan.md`）：S1.0 布局钩子 / S1.1 顶栏 48px / S1.2 三栏百分比 /
+**S1.3 左栏 9 图标 Tab / S1.4 时间线 50% 已完成**，
+**只剩 S1.5 控制栏叠到画面底部**。
 这条线之外，剩下的都是"真实素材上的手感打磨"与"部分交付"那 4 条要不要接模型。
 
 ---

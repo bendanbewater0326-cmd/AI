@@ -168,6 +168,7 @@ interface VeditorTestHooks {
    */
   uiLayout: () => {
     window: { w: number; h: number };
+    workspace: Box | null;
     topbar: Box | null;
     left: Box | null;
     /** 左栏内部的 44px 图标条与 Tab 内容区（S1.3：图标条算在 25% 之内）。 */
@@ -591,6 +592,8 @@ export function App(): ReactElement {
    * 默认 25% / 50% / 25%（对齐 opencut-classic 的 PANEL_CONFIG）。
    */
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  /** 时间线高度按"工作区高度的百分比"算，所以拖拽换算要用工作区的 rect。 */
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
   const [collapsed, setCollapsed] = useState(() => ({
     left: readStoredCollapsed('left'),
     right: readStoredCollapsed('right'),
@@ -606,6 +609,14 @@ export function App(): ReactElement {
         applyPanelWidth(side, readStoredPct(side), false);
       }
     }
+    /**
+     * 时间线高度：同样只在"用户拖过"时才写行内值。
+     *
+     * 没拖过就不写 —— 让 `:root` 里的 `--v-timeline-pct: 50` 生效。
+     * 这样以后加"矮窗口自动收窄时间线"的媒体查询时，不会被挂载时写死的
+     * 行内值盖成死代码（S1.2 的窄屏 bug 就是这么来的）。
+     */
+    if (hasStoredPct('timeline')) applyPanelWidth('timeline', readStoredPct('timeline'), false);
   }, []);
 
   function togglePanel(side: 'left' | 'right'): void {
@@ -1072,6 +1083,7 @@ export function App(): ReactElement {
         const readVar = (name: string): string => style.getPropertyValue(name).trim();
         return {
           window: { w: window.innerWidth, h: window.innerHeight },
+          workspace: box('[data-v="workspace"]'),
           topbar: box('[data-v="topbar"]'),
           left: box('[data-v="asset-panel"]'),
           leftRail: box('[data-v="left-tabbar"]'),
@@ -1090,6 +1102,8 @@ export function App(): ReactElement {
             splitterW: readVar('--v-splitter-w'),
             ctrlbarH: readVar('--v-ctrlbar-h'),
             timelineH: readVar('--v-timeline-h'),
+            /** 时间线高度百分比（无单位，S1.4：默认 50，可拖 15–70）。 */
+            timelinePct: readVar('--v-timeline-pct'),
           },
         };
       },
@@ -1267,7 +1281,7 @@ export function App(): ReactElement {
       <MemoryModeBanner />
       <OfflineBanner autoRestoreDone={autoRestoreDone} />
       <TopBar buildId={buildId} />
-      <div className="v-workspace">
+      <div className="v-workspace" ref={workspaceRef} data-v="workspace">
         <ErrorBar />
         <div
           className="v-body"
@@ -1306,6 +1320,17 @@ export function App(): ReactElement {
           />
           <InspectorPanel />
         </div>
+        {/*
+          时间线分隔条：与左右栏**同一个组件**，只是轴换成 y、范围 15%–70%。
+          它占 `.v-workspace` 的第 2 行（4px），正好压在"预览区/时间线"的边界上。
+          不给折叠入口：时间线高度归零后没有任何替代入口能把它拉回来。
+        */}
+        <Splitter
+          side="timeline"
+          collapsed={false}
+          onResizeEnd={(pct) => storePct('timeline', pct)}
+          containerRef={workspaceRef}
+        />
         <TimelineView transport={transport} />
       </div>
       <div className="v-sr-only" role="status" aria-live="polite" aria-atomic="true" data-v="a11y-status">
