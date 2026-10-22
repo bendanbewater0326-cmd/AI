@@ -7,7 +7,7 @@
 
 :root {
   /* 尺寸 */
-  --v-topbar-h: 32px;
+  --v-topbar-h: 48px;
   --v-rail-w: 110px;
   --v-ctrlbar-h: 36px;
   --v-timeline-h: 220px;
@@ -145,16 +145,86 @@ select:focus-visible,
 }
 
 /* 顶栏 32px */
+/**
+ * 顶栏 48px。
+ *
+ * 从 32 提到 48 不是为了"好看"：32px 高时按钮只有 20px 左右的可点区域，
+ * 而且放不下"撤销/重做/分割"这类高频工具。48px 是桌面端剪辑软件的常见值
+ * （对齐 opencut-classic 的 `EditorHeader`）。
+ */
 .v-topbar {
   flex: 0 0 var(--v-topbar-h);
   height: var(--v-topbar-h);
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 8px;
+  gap: 10px;
+  padding: 0 12px;
   border-bottom: 0.5px solid var(--v-border);
   background: var(--v-surface);
   font-size: 12px;
+}
+
+/* 软件标识：只做视觉锚点（不可点） */
+.v-topbar__brand {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--v-accent);
+  user-select: none;
+}
+
+/* 分组竖线：把"工程信息 / 编辑工具 / 右侧动作"三段分开 */
+.v-topbar__divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 18px;
+  background: var(--v-border);
+}
+
+.v-topbar__tools {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.v-topbar__tool {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  border: 0.5px solid transparent;
+  border-radius: var(--v-radius);
+  background: transparent;
+  color: var(--v-fg);
+  cursor: pointer;
+}
+
+.v-topbar__tool:hover:not(:disabled) {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-topbar__tool:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.v-topbar__dropdown-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--v-border);
+}
+
+.v-topbar__dropdown-stamp {
+  padding: 4px 10px;
+  font-size: 10px;
+  color: var(--v-fg-dim);
+  white-space: nowrap;
 }
 
 .v-topbar__name {
@@ -1602,10 +1672,23 @@ body.v-track-dragging .v-track-head {
 }
 
 /* 顶栏主题按钮（R-064）：与其它图标按钮同尺寸 */
+/* 文字按钮（现在只剩「自检」用它；主题/缓存已收进「工程」下拉） */
 .v-topbar__theme {
-  width: 24px;
-  padding: 0;
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 10px;
   font-size: 12px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: transparent;
+  color: var(--v-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.v-topbar__theme:hover {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
 }
 
 /**

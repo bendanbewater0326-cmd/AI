@@ -13,7 +13,8 @@ import type { Frame, MilliFps, Project, ProjectParams } from '../core/types';
 import { makeError } from '../core/types';
 import { previewRecompute } from '../core/operations';
 import { framesPerSecond } from '../core/timebase';
-import { store, useDerived, useDoc } from '../core/store';
+import { store, useDerived, useDoc, useVersion } from '../core/store';
+import { splitAtPlayhead } from '../core/keymap';
 import { ExportDialog } from './ExportDialog';
 import { SelfCheckPanel } from './SelfCheck';
 import { CacheDialog } from './CacheDialog';
@@ -79,6 +80,13 @@ export function TopBar({ buildId = '' }: { buildId?: string } = {}): ReactElemen
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [selfCheckOpen, setSelfCheckOpen] = useState(false);
   const [cacheOpen, setCacheOpen] = useState(false);
+  /**
+   * 订阅"任何状态变化"，让撤销/重做按钮的可用性跟着变。
+   * `useDoc` 只在 doc 变化时重渲染，而 `canUndo` 依赖撤销栈深度（ephemeral 的一部分）。
+   */
+  useVersion();
+  const canUndo = store.canUndo();
+  const canRedo = store.canRedo();
   const [theme, setThemeState] = useState(getTheme());
   const projectFileRef = useRef<HTMLInputElement | null>(null);
   /** 字幕文件选择（R-059）。 */
@@ -284,6 +292,11 @@ async function importProjectFile(file: File): Promise<void> {
 
   return (
     <header className="v-topbar" data-v="topbar">
+      {/* 软件标识：只做视觉锚点，不可点（点它没有任何合理动作） */}
+      <span className="v-topbar__brand" data-v="brand" aria-hidden="true">
+        veditor
+      </span>
+
       {renaming ? (
         <input
           ref={inputRef}
@@ -324,28 +337,56 @@ async function importProjectFile(file: File): Promise<void> {
         {`${width}×${height} · ${formatFps(fpsMilli)}fps`}
       </button>
 
-      <span className="v-topbar__spacer" />
+      <span className="v-topbar__divider" aria-hidden="true" />
 
-      <button
-        type="button"
-        data-v="theme-toggle"
-        className="v-topbar__theme"
-        aria-pressed={theme === 'contrast'}
-        title={theme === 'contrast' ? '切换回默认主题' : '切换到高对比主题'}
-        onClick={() => void toggleTheme()}
-      >
-        ◐ 主题
-      </button>
-
-      {buildId === '' ? null : (
-        <span
-          className="v-topbar__stamp"
-          data-v="build-stamp"
-          title={`构建于 ${formatBuildTime(buildId)}（本地时间）—— 顶栏时间就是页面加载的这份代码的构建时间`}
+      {/**
+        * 高频编辑工具。
+        *
+        * **没有"选择工具"**：这个项目不做"选择/切割/手型"的模式切换
+        * （`docs/ux-plan.md` §6 明确列为不做项）—— 时间线只有一种交互，
+        * 加一个点了什么都不改变的按钮就是死按钮。
+        */}
+      <div className="v-topbar__tools" data-v="topbar-tools">
+        <button
+          type="button"
+          className="v-topbar__tool"
+          data-v="undo"
+          disabled={!canUndo}
+          title="撤销（Ctrl+Z）"
+          aria-label="撤销"
+          onClick={() => store.undo()}
         >
-          {formatBuildTime(buildId)}
-        </span>
-      )}
+          ↶
+        </button>
+        <button
+          type="button"
+          className="v-topbar__tool"
+          data-v="redo"
+          disabled={!canRedo}
+          title="重做（Ctrl+Shift+Z）"
+          aria-label="重做"
+          onClick={() => store.redo()}
+        >
+          ↷
+        </button>
+        <button
+          type="button"
+          className="v-topbar__tool"
+          data-v="split"
+          title="在播放头处分割（B）"
+          aria-label="分割"
+          onClick={() => {
+            const count = splitAtPlayhead(store);
+            if (count === 0) {
+              store.pushError(makeError('E_INVALID_TIMECODE', '播放头位置没有可分割的片段', ''));
+            }
+          }}
+        >
+          ✂
+        </button>
+      </div>
+
+      <span className="v-topbar__spacer" />
 
       <button
         type="button"
@@ -355,16 +396,6 @@ async function importProjectFile(file: File): Promise<void> {
         onClick={() => setSelfCheckOpen(true)}
       >
         自检
-      </button>
-
-      <button
-        type="button"
-        className="v-topbar__theme"
-        data-v="cache-open"
-        title="素材缓存：导入过的素材会复制一份到本地缓存，刷新后不再依赖源文件"
-        onClick={() => setCacheOpen(true)}
-      >
-        缓存
       </button>
 
       <div className="v-topbar__menu">
@@ -423,6 +454,42 @@ async function importProjectFile(file: File): Promise<void> {
             >
               导出字幕（SRT）
             </button>
+            <div className="v-topbar__dropdown-sep" role="separator" />
+            {/**
+              * 主题 / 缓存 / 构建时间都收进这里。
+              *
+              * 它们原来在顶栏右侧平铺，占了 3 个位置但都是"偶尔用一次"的功能；
+              * 顶栏要腾出位置给"撤销/重做/分割"这些真正高频的操作。
+              * **`data-v` 保持不变**：E2E 靠它找元素，收进下拉不影响选择器。
+              */}
+            <button
+              type="button"
+              data-v="theme-toggle"
+              role="menuitem"
+              aria-pressed={theme === 'contrast'}
+              onClick={() => {
+                setProjectMenuOpen(false);
+                void toggleTheme();
+              }}
+            >
+              {theme === 'contrast' ? '切换回默认主题' : '切换到高对比主题'}
+            </button>
+            <button
+              type="button"
+              data-v="cache-open"
+              role="menuitem"
+              onClick={() => {
+                setProjectMenuOpen(false);
+                setCacheOpen(true);
+              }}
+            >
+              素材缓存…
+            </button>
+            {buildId === '' ? null : (
+              <span className="v-topbar__dropdown-stamp" data-v="build-stamp">
+                {`构建于 ${formatBuildTime(buildId)}`}
+              </span>
+            )}
           </div>
         ) : null}
       </div>

@@ -227,8 +227,18 @@ try {
       return JSON.stringify({ theme: document.documentElement.getAttribute('data-theme'), bg: getComputedStyle(app).backgroundColor, w: box.width, h: box.height });
     })()`),
   );
+  /**
+   * 主题开关已收进「工程」下拉（S1.1：顶栏腾位置给撤销/重做/分割）。
+   * 所以"点主题"要先展开下拉；切换完下拉会自动关闭，读 `aria-pressed` 前要再展开一次。
+   */
+  const openProjectMenu = async () => {
+    await page.session.evaluate(`document.querySelector('[data-v="project-menu"]').click()`);
+    await sleep(300);
+  };
+  await openProjectMenu();
   await page.session.evaluate(`document.querySelector('[data-v="theme-toggle"]').click()`);
   await sleep(400);
+  await openProjectMenu();
   const afterTheme = JSON.parse(
     await page.session.evaluate(`(() => {
       const app = document.querySelector('.v-app');
@@ -238,7 +248,8 @@ try {
         bg: getComputedStyle(app).backgroundColor,
         w: box.width,
         h: box.height,
-        pressed: document.querySelector('[data-v="theme-toggle"]').getAttribute('aria-pressed'),
+        // 下拉已关闭，重新展开再读（元素只有展开时在 DOM 里）
+        pressed: document.querySelector('[data-v="theme-toggle"]')?.getAttribute('aria-pressed') ?? 'missing',
       });
     })()`),
   );
@@ -252,7 +263,7 @@ try {
   );
   report.check('⑥ 按钮 aria-pressed 反映状态', afterTheme.pressed === 'true');
 
-  // 切回默认
+  // 切回默认（下拉此刻是展开的，直接点）
   await page.session.evaluate(`document.querySelector('[data-v="theme-toggle"]').click()`);
   await sleep(300);
   const backToDefault = await page.session.evaluate(

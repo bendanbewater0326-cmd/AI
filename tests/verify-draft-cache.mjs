@@ -96,6 +96,17 @@ const previewFilled = async () =>
     })()`),
   );
 
+/**
+ * 打开「工程」下拉。
+ *
+ * 主题 / 缓存 已从顶栏平铺**收进「工程」下拉**（S1.1：顶栏要腾位置给
+ * 撤销/重做/分割）。`data-v` 没变，但元素只有下拉展开时才在 DOM 里。
+ */
+async function openProjectMenu() {
+  await page.session.evaluate(`document.querySelector('[data-v="project-menu"]').click()`);
+  await sleep(300);
+}
+
 /** 轮询等缓存写完（后台队列是异步的）。 */
 async function waitForCache(timeoutMs = 12000) {
   const deadline = Date.now() + timeoutMs;
@@ -131,6 +142,7 @@ try {
   );
 
   // ---- ③ 缓存面板：统计与开关都在 ----
+  await openProjectMenu();
   await page.session.evaluate(`document.querySelector('[data-v="cache-open"]').click()`);
   await sleep(400);
   const panelOpen = await exists('[data-v="cache-dialog"]');
@@ -191,6 +203,7 @@ try {
   );
 
   // ---- ⑥ 关闭开关后新导入不再缓存 ----
+  await openProjectMenu();
   await page.session.evaluate(`document.querySelector('[data-v="cache-open"]').click()`);
   await sleep(300);
   await page.session.evaluate(`document.querySelector('[data-v="cache-auto-toggle"]').click()`);
@@ -203,6 +216,7 @@ try {
   report.check(`⑥ 开关可关闭（localStorage=${JSON.stringify(afterToggle)}）`, afterToggle === '0');
 
   // 再打开，避免影响后续
+  await openProjectMenu();
   await page.session.evaluate(`document.querySelector('[data-v="cache-open"]').click()`);
   await sleep(300);
   await page.session.evaluate(`document.querySelector('[data-v="cache-auto-toggle"]').click()`);
