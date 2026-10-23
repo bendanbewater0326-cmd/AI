@@ -15,6 +15,7 @@
  * 唯一允许的 React 依赖：`useSyncExternalStore`（仅此一个符号，架构 §1.2 例外条款）。
  */
 import { useSyncExternalStore } from 'react';
+import { readPrefs, writePrefs } from './prefs';
 import type {
   Asset,
   Clip,
@@ -365,7 +366,10 @@ export function createStore(initialDoc?: Project): ProjectStore {
   let doc: Project = initialDoc ?? createProject();
   const past: UndoEntry[] = [];
   const future: UndoEntry[] = [];
-  let ephemeral: EphemeralState = { ...EMPTY_EPHEMERAL };
+  // 吸附是**持久化偏好**（设置面板里关掉后，重开还是关）。
+  // 每次创建 store 都重新读一次 —— `EMPTY_EPHEMERAL` 是模块级常量，只在 import 时求值，
+  // 用户改完偏好后再建的 store 会拿到旧值。
+  let ephemeral: EphemeralState = { ...EMPTY_EPHEMERAL, snapEnabled: readPrefs().snapEnabled };
   let version = 0;
   const listeners = new Set<() => void>();
   const playheadBus = createBus<Frame>(doc.playheadFrame);
@@ -701,12 +705,14 @@ export function createStore(initialDoc?: Project): ProjectStore {
     setSnapEnabled(enabled: boolean): void {
       if (ephemeral.snapEnabled === enabled) return;
       ephemeral = { ...ephemeral, snapEnabled: enabled };
+      writePrefs({ snapEnabled: enabled });
       notify();
     },
 
     toggleSnap(): boolean {
       const next = !ephemeral.snapEnabled;
       ephemeral = { ...ephemeral, snapEnabled: next };
+      writePrefs({ snapEnabled: next });
       notify();
       return next;
     },
