@@ -51,7 +51,7 @@ async function main() {
     format: 'esm',
     target: ['chrome110', 'edge110'],
     platform: 'browser',
-    loader: { '.css': 'css' },
+    loader: { '.css': 'css', '.m4a': 'dataurl' },
     sourcemap: 'inline',
     define: {
       'process.env.NODE_ENV': '"development"',

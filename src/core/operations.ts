@@ -866,8 +866,9 @@ export function recomputeProject(doc: Project, params: ProjectParams): Recompute
  * 三条硬约束：
  * 1. **只有第一个素材能改写**——`doc.assets.length > 0` 直接返回 false，后续素材走 R-031 映射；
  * 2. **不弹窗、不进撤销栈**——用 `applyProjectParams` 静默写；
- * 3. 纯音频素材不改写分辨率（没有画面），但若工程 fps 与素材不同仍会跟随素材帧率，
- *    避免"音频 44.1k 素材把工程拉到 30fps 又没画面"的怪异状态。
+ * 3. **纯音频素材不改写任何参数**：没有画面；fps 对纯音频也没有意义
+ *    （探测层对无视频轨的容器只能回退 `DEFAULT_FPS_MILLI`，"跟随"它 = 把工程 fps
+ *    悄悄重置成 30——音频面板上线后首个内容是音效的概率大增，这条必须挡住）。
  *
  * 必须在 `store.addAsset()` **之前**调用（那时 assets 还是空）。
  */
@@ -879,9 +880,7 @@ export function applyFirstAssetParams(
   if (doc.assets.length > 0) return false;
   if (!Number.isInteger(asset.fpsMilli) || asset.fpsMilli <= 0) return false;
   const hasFrame = asset.width > 0 && asset.height > 0 && asset.kind !== 'audio';
-  const next = hasFrame
-    ? { width: asset.width, height: asset.height, fpsMilli: asset.fpsMilli }
-    : { width: doc.width, height: doc.height, fpsMilli: asset.fpsMilli };
-  store.applyProjectParams(next);
+  if (!hasFrame) return false;
+  store.applyProjectParams({ width: asset.width, height: asset.height, fpsMilli: asset.fpsMilli });
   return true;
 }

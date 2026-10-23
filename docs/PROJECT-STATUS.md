@@ -2303,6 +2303,34 @@ S1.0 的钩子、S1.1 的顶栏都只是"不挡路"。这一轮才是真正把�
 
 ---
 
+### 3.38 2026-10-24 · 音频面板 A1：内置音效数据层（方案 C 落地）
+
+**摸底结论**（`docs/audio-panel-plan.md`）：音频引擎/导出/落轨/操作日志全部成熟不用动；
+真正的缺口是**导入管线只认 mp4/webm，纯 WAV/MP3 进不来**，而 `demuxMp4` 本来就支持纯音频 mp4。
+
+**方案 C（用户拍板）**：构建期 ffmpeg 程序化合成 10 个纯音频 mp4（AAC 单声道 48kHz，
+`scripts/gen-sfx.mjs`，合计 ~97KB 提交进 git）→ esbuild `dataurl` loader 内联 →
+运行时解码成 `File`（显式 `lastModified: 0`）走**现有 `importAssetFile` 全链路**注册为真资产。
+media 层零改动；草稿缓存/刷新恢复/素材栏复用全部免费获得。**不绕过导入管线**（第二条导入路径
+是本项目"同一规则两处写"的经典 bug 形态）。
+
+**幂等查重与素材栏同一份依据**：`Asset.hashKey`（文件名|字节数|lastModified）。
+音效字节构建期固定 + `lastModified: 0` → hashKey 跨会话确定；`ensureSfxAsset` 有则复用、
+无则导入，in-flight 合并连点。
+
+**顺带修一个真 bug**：`applyFirstAssetParams` 对纯音频资产会把工程 fps **静默重置成 30**
+（探测层对无视频轨容器只能回退 `DEFAULT_FPS_MILLI`，"跟随"它就是跟随兜底值）。
+改为纯音频不跟随任何参数——音频面板上线后"首个内容是音效"的概率大增，这条必须挡住。
+
+**踩坑**：esbuild 的 `base64` loader 导出的是**裸 base64 字符串**，带 data URL 前缀的
+是 `dataurl` loader——三处（build/dev/测试 harness）都要写对。
+
+**验证**：`tests/sfx.test.mjs` 17 条（预设表完整性 / dataUrl 解码 / hashKey 确定 /
+ensure 幂等与并发合并 / applyFirstAssetParams 回归）；全量 **733 单测 / 42 脚本**全绿、
+时基守卫 109 文件 0 违规。**人工试听 10 个音效是 A1 的验收项**（E2E 测不了听感）。
+
+---
+
 ## 4. 技术栈
 
 | 层 | 技术 |

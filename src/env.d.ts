@@ -3,6 +3,11 @@ declare module '*.css';
 declare module '*.svg';
 declare module '*.webp';
 declare module '*.png';
+/** 内置音效（esbuild dataurl loader 内联，默认导出 data URL 字符串）。 */
+declare module '*.m4a' {
+  const dataUrl: string;
+  export default dataUrl;
+}
 
 /**
  * 版本号由构建脚本注入（`scripts/build.mjs` / `scripts/dev.mjs` 的 esbuild `define`，
