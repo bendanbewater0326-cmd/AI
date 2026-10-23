@@ -653,7 +653,7 @@ test('E5 非法输入一律抛错（浮点帧、零帧率、越界素材）', ()
   throws(() => mapAt({ ...context, projectMilliFps: 0 }, 0), 'E5 项目帧率为 0');
 });
 
-test('E6 导出符号封闭：恰好 14 个函数 + 2 个常量', () => {
+test('E6 导出符号封闭：恰好 16 个函数 + 2 个常量', () => {
   // 2026-10-20（T09）：新增 `usToSeconds`——兼容模式要把帧号换算成秒驱动 <video>。
   // 2026-10-20（T15）：新增 `framesPerSecond`——标尺刻度要算 px/秒，`fpsMilli/1000`
   //   是毫帧率定义里的固有除法，只能收进 timebase。两者都刻意不加"组合函数"：
@@ -664,10 +664,14 @@ test('E6 导出符号封闭：恰好 14 个函数 + 2 个常量', () => {
   //   字幕导入导出要在这两个单位间来回换；放在调用方就是又一处裸换算（守卫也会拦）。
   // 2026-10-21（R-059 语音识别）：新增 `secondsToMs` / `msToSeconds`——宿主 ASR 回传的是
   //   "秒"，字幕内部是"毫秒"；`sec * 1000` 同样是被守卫拦的裸换算。
+  // 2026-10-23（字幕面板 C1）：新增 `formatMs` / `parseMs`——字幕面板用毫秒口径展示时间码，
+  //   时分秒进位是裸 `1000` 运算（守卫会拦），只能收进 timebase。
+  //   刻意**不**给它们起 `formatCaptionMs` 这种面板专属名：它就是通用的毫秒格式化。
   const expected = [
     'DEFAULT_FPS_MILLI',
     'PROJECT_SAMPLE_RATE',
     'assetFrameToProjectFrame',
+    'formatMs',
     'frameToMs',
     'frameToSample',
     'frameToUs',
@@ -675,6 +679,7 @@ test('E6 导出符号封闭：恰好 14 个函数 + 2 个常量', () => {
     'mapProjectFrameToAssetFrame',
     'msToFrame',
     'msToSeconds',
+    'parseMs',
     'projectSpanFrames',
     'samplesToUs',
     'secondsToFrames',

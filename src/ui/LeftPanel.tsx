@@ -36,6 +36,7 @@ import { TextPanel } from './TextPanel';
 import { TransitionPanel } from './TransitionPanel';
 import { EffectPanel } from './EffectPanel';
 import { AdjustPanel } from './adjust/AdjustPanel';
+import { CaptionPanel } from './caption/CaptionPanel';
 
 /** 9 个 Tab 的固定顺序（对齐 opencut-classic 的 TAB_KEYS，去掉我们不做的 adjustment 之外的项）。 */
 export const LEFT_TABS = [
@@ -200,7 +201,13 @@ function TabPlaceholder({ label, hint }: { label: string; hint: string }): React
 }
 
 /** 左栏：图标条 + 内容区。 */
-export function LeftPanel(): ReactElement {
+export interface LeftPanelProps {
+  /** 跳播放头（字幕面板点条目要用；由 App 注入 `transport.seekTo`）。 */
+  onSeek: (frame: number) => void;
+}
+
+export function LeftPanel(props: LeftPanelProps): ReactElement {
+  const { onSeek } = props;
   const [active, setActive] = useState<LeftTabKey>(() => {
     const stored = readStoredTab();
     activeTabMemo = stored;
@@ -272,7 +279,11 @@ export function LeftPanel(): ReactElement {
         <div className="v-tabpane__slot" hidden={active !== 'adjust'} data-v="adjust-content-slot">
           <AdjustPanel />
         </div>
-        {active === 'media' || active === 'text' || active === 'transition' || active === 'effect' || active === 'adjust' ? null : (
+        {/* 字幕面板：与文本面板同源（都写 clip.text + text 轨），这里管整条字幕轨 */}
+        <div className="v-tabpane__slot" hidden={active !== 'caption'} data-v="caption-content-slot">
+          <CaptionPanel onSeek={onSeek} />
+        </div>
+        {active === 'media' || active === 'text' || active === 'transition' || active === 'effect' || active === 'adjust' || active === 'caption' ? null : (
           <TabPlaceholder label={current.label} hint={current.hint} />
         )}
       </div>

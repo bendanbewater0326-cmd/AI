@@ -24,6 +24,7 @@ import type {
   Transition,
 } from '../core/types';
 import { createAsset, createClip, createTrack, maxTransitionFrames, normalizeRotation } from '../core/types';
+import type { TextOrigin } from '../core/types';
 import { VOLUME_MAX_DB, dbToGain } from '../core/volume';
 
 /** 工程 schema 版本（`ready` 事件与 `setProject` 响应都带它）。 */
@@ -123,6 +124,14 @@ function normalizeText(raw: unknown): TextContent | null {
      * 就等于"存盘再打开，描边/粗体没了"——从界面上完全看不出来（见 §9.4 同款教训）。
      */
     ...(raw['bold'] === true ? { bold: true } : {}),
+    /**
+     * `origin` 是 2026-10-23 新增（字幕面板要区分手动/字幕/AI）。
+     * 只接受三个合法值；**缺失时不写字段**，读取侧按 `clip.source` 推断
+     * （这样旧工程仍然工作，且不会把"没有来源"硬说成 manual）。
+     */
+    ...(raw['origin'] === 'manual' || raw['origin'] === 'caption' || raw['origin'] === 'ai'
+      ? { origin: raw['origin'] as TextOrigin }
+      : {}),
     ...(isObject(strokeRaw) && num(strokeRaw['width'], 0) > 0
       ? { stroke: { width: Math.max(0, Math.min(40, num(strokeRaw['width'], 0))), color: str(strokeRaw['color'], '#000000') } }
       : {}),

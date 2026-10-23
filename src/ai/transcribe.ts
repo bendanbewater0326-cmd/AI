@@ -181,7 +181,8 @@ export async function transcribeTimeline(
     );
   }
 
-  const plan = buildSubtitleReplaceOps(cues, doc);
+  // 来源标 `ai`：字幕面板据此显示「AI」角标（与 SRT 导入的 `caption` 区分）
+  const plan = buildSubtitleReplaceOps(cues, doc, 'ai');
 
   return ok({
     cues,

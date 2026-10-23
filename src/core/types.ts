@@ -256,6 +256,19 @@ export interface Transition {
  * 文本不建"文字素材"，而是挂在 clip 上：这样复制/裁剪/移动/撤销全都复用片段那套逻辑，
  * 不需要为文字再造一套"素材"生命周期（刷新后素材句柄失效的问题也不会波及文字）。
  */
+/**
+ * 文字的**来源**（2026-10-23 新增，字幕面板用）。
+ *
+ * - `manual`：用户在文本面板手动添加
+ * - `caption`：SRT 导入
+ * - `ai`：语音转写生成
+ *
+ * 只影响 UI 的角标展示，**不参与渲染**（所以不必进 `textLayer` 的缓存 key）。
+ * 旧工程没有这个字段：读取时按 `clip.source` 推断（见 `core/captions.captionOrigin`），
+ * 写入时显式带上。
+ */
+export type TextOrigin = 'manual' | 'caption' | 'ai';
+
 export interface TextContent {
   content: string;
   /** 相对项目高度的字号（默认 72 @1080p）。 */
@@ -279,6 +292,13 @@ export interface TextContent {
    * 实现上用 `lineWidth = width * 2` 先描后填，让外侧留 `width`。
    */
   stroke?: { width: number; color: string } | null;
+  /**
+   * 来源（缺省按 `clip.source` 推断：ai → 'ai'，否则 'manual'）。
+   *
+   * **可选字段必须全链路归一化**：`normalizeText` 漏了它就是"存盘再打开，
+   * SRT 导入的字幕变回手动文字"（角标错位，界面上不明显，只有重开工程才发现）。
+   */
+  origin?: TextOrigin;
 }
 
 export interface Clip {
@@ -1088,6 +1108,7 @@ export function createTextContent(overrides: Partial<TextContent> = {}): TextCon
     x: 0,
     y: 0,
     background: '',
+    origin: 'manual',
     ...overrides,
   };
 }

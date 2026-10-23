@@ -447,3 +447,51 @@ export function samplesToUs(samples: number, rate: number): Us {
   }
   return divRoundHalfUp(samples * MILLI_PER_SECOND * 1000, rate);
 }
+
+/* ---------------- 毫秒 ↔ 时分秒文本（字幕面板用） ---------------- */
+
+/**
+ * 毫秒 → `HH:MM:SS.mmm`。
+ *
+ * 字幕面板用**毫秒口径**而不是帧：SRT 规范本身就是毫秒，用户对"2.5 秒"的感知
+ * 也比"75 帧"直接。（时间线顶栏的 `formatTimecode` 是帧口径 `HH:MM:SS:FF`，两者不要混用。）
+ *
+ * 放在 timebase 里的原因：`check-timebase` 守卫禁止在其它文件出现
+ * "与时间标识符同现的 1000 缩放"——这里的时分秒进位就是那种运算。
+ */
+export function formatMs(ms: number): string {
+  const total = Math.max(0, Math.round(Number.isFinite(ms) ? ms : 0));
+  const perHour = MILLI_PER_SECOND * 60 * 60;
+  const perMinute = MILLI_PER_SECOND * 60;
+  const hours = Math.floor(total / perHour);
+  const minutes = Math.floor((total % perHour) / perMinute);
+  const seconds = Math.floor((total % perMinute) / MILLI_PER_SECOND);
+  const millis = total % MILLI_PER_SECOND;
+  const pad = (value: number, width = 2): string => String(value).padStart(width, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${pad(millis, 3)}`;
+}
+
+/**
+ * `HH:MM:SS.mmm` / `MM:SS.mmm` / `SS.mmm` → 毫秒。
+ *
+ * 容错：允许省略毫秒（当 0）、允许 `,` 作小数分隔符（SRT 规范用逗号）。
+ * **非法输入返回 `null` 而不是 0**——0 是合法时间，返回 0 会让用户以为"改成功了"。
+ */
+export function parseMs(text: string): number | null {
+  const trimmed = text.trim().replace(',', '.');
+  if (trimmed === '') return null;
+  const parts = trimmed.split(':');
+  if (parts.length > 3) return null;
+  const numbers: number[] = [];
+  for (const part of parts) {
+    if (!/^\d+(\.\d+)?$/.test(part)) return null;
+    numbers.push(Number(part));
+  }
+  const seconds = numbers.pop() as number;
+  const minutes = numbers.length > 0 ? (numbers.pop() as number) : 0;
+  const hours = numbers.length > 0 ? (numbers.pop() as number) : 0;
+  if (minutes >= 60 || hours > 999) return null;
+  const total =
+    (hours * 60 * 60 + minutes * 60 + seconds) * MILLI_PER_SECOND;
+  return Number.isFinite(total) ? Math.round(total) : null;
+}

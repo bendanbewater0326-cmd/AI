@@ -3074,3 +3074,247 @@ body.v-track-dragging .v-track-head {
   height: 18px;
   text-align: right;
 }
+
+/* ============================================================
+ * 字幕面板（左栏「字幕」Tab）
+ * ============================================================ */
+
+.v-caption-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.v-caption-panel__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-caption-panel__count {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-caption-panel__spacer {
+  flex: 1 1 auto;
+}
+
+.v-caption-btn {
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-2);
+  color: var(--v-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.v-caption-btn:hover:not(:disabled) {
+  border-color: var(--v-accent);
+}
+
+.v-caption-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.v-caption-btn--primary {
+  background: var(--v-accent);
+  border-color: var(--v-accent);
+  color: #fff;
+}
+
+.v-caption-btn--mini {
+  height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* ---- 列表 ---- */
+
+.v-caption-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/*
+ * 单行紧凑：一屏 8–10 条（用户明确要求）。
+ * 行高 26px = 10px 时间码 + 12px 文本 + 上下各 4px padding，与左栏 25% 宽度匹配。
+ */
+.v-caption-row {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--v-radius);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.v-caption-row:hover {
+  background: var(--v-surface-2);
+}
+
+/* 选中：蓝色左边条（与时间线片段的选中色一致，不抢播放高亮的位置） */
+.v-caption-row[data-selected="true"] {
+  background: var(--v-surface-2);
+  border-left-color: var(--v-accent);
+}
+
+/* 播放中所在的字幕：浅色底 + 左侧亮条（与"选中"是两个维度，可同时成立） */
+.v-caption-row[data-active="true"] {
+  background: color-mix(in srgb, var(--v-accent) 12%, transparent);
+}
+
+.v-caption-row[data-active="true"] .v-caption-row__text {
+  color: var(--v-fg);
+}
+
+.v-caption-row__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.v-caption-row__time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--v-fg-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.v-caption-row__badge {
+  flex: 0 0 auto;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--v-fg-dim);
+  background: var(--v-surface-3, rgba(0, 0, 0, 0.06));
+}
+
+.v-caption-row__badge[data-origin="ai"] {
+  color: var(--v-accent);
+  background: color-mix(in srgb, var(--v-accent) 14%, transparent);
+}
+
+.v-caption-row__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--v-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-caption-row__editor {
+  flex: 1 1 auto;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--v-fg);
+  background: var(--v-surface-1);
+  border: 0.5px solid var(--v-accent);
+  border-radius: var(--v-radius);
+  padding: 3px 5px;
+  resize: vertical;
+  outline: none;
+}
+
+/* ---- 空状态 ---- */
+
+.v-caption-empty {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 18px;
+  text-align: center;
+}
+
+.v-caption-empty__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v-fg);
+}
+
+.v-caption-empty__hint {
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--v-fg-dim);
+}
+
+.v-caption-empty__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.v-caption-empty__note {
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--v-warn, #b45309);
+}
+
+/* 字幕面板工具条（C3）：三个入口一行排开 */
+.v-caption-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-caption-toolbar .v-caption-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 条数 + 操作反馈 */
+.v-caption-statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+  padding: 2px 8px;
+}
+
+.v-caption-statusbar__notice {
+  font-size: 10px;
+  color: var(--v-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

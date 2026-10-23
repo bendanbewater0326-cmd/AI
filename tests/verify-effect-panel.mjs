@@ -234,7 +234,8 @@ try {
 
   // ---- ⑥ 属性栏同步（面板与滑块写的是同一份数据）----
   const tempSlider = await page.session.evaluate(
-    `document.querySelector('[data-v="inspector-temperature-value"]')?.textContent ?? ''`,
+    // S5 起 `-value` 从 `<span>` 升级成 `<input type=number>`（可编辑），要读 `.value` 不是 `textContent`
+    `document.querySelector('[data-v="inspector-temperature-value"]')?.value ?? ''`,
   );
   report.check(`⑥ 属性栏色温滑块跟着变（显示 ${tempSlider}）`, String(tempSlider).trim() === '34');
 

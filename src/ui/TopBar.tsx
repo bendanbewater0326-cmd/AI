@@ -22,7 +22,7 @@ import { getAIProvider, isAIUsable } from '../ai/registry';
 import { parseProjectFile, projectFileName, serializeProjectFile } from '../persist/projectFile';
 import { resetPreviewSources } from '../media/previewSource';
 import { getTheme, subscribeTheme, toggleTheme } from './theme';
-import { buildSubtitleReplaceOps, extractSubtitles, parseSrt, serializeSrt } from '../subtitle/srt';
+import { exportSrt, importSrtFile } from './caption/actions';
 
 /**
  * 构建时间戳 → 本地 `HH:MM:SS`。
@@ -215,54 +215,6 @@ function exportProjectFile(): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/**
- * 导入字幕（R-059）：解析 SRT → 每个 cue 一个文本片段，落在最上层视频轨。
- *
- * **整段替换**：导入前先删掉现有的文本片段——字幕是"整份"的，新旧混在一起会叠字，
- * 而且用户没法一次清干净。删除与新增在同一批操作里，所以是一个撤销步。
- */
-async function importSubtitles(file: File): Promise<void> {
-  let text = '';
-  try {
-    text = await file.text();
-  } catch {
-    store.pushError(makeError('E_INVALID_PROJECT', '读取字幕文件失败', file.name));
-    return;
-  }
-  const parsed = parseSrt(text);
-  if (parsed.cues.length === 0) {
-    store.pushError(
-      makeError('E_INVALID_PROJECT', '没有解析出字幕', `跳过 ${parsed.skipped} 个无效块`),
-    );
-    return;
-  }
-  const doc = store.getDoc();
-  // 落轨规则收敛在 `core/placement.textTrackFor`：字幕与手动添加的文字同一条文字轨
-  const plan = buildSubtitleReplaceOps(parsed.cues, doc);
-  // 重叠 cue 会被截短尾巴（字幕不能同时出现两条），条数要说出来——
-  // 用户导入双语/工具生成的 SRT 时会看到"条数比文件里少"，不说明就是静默改数据。
-  const truncatedNote = plan.truncated > 0 ? `，${plan.truncated} 条重叠已截短` : '';
-  store.dispatch(plan.ops, `导入字幕（${parsed.cues.length} 条${truncatedNote}）`);
-}
-
-/** 导出字幕（R-059）：从工程里的文本片段生成 SRT。 */
-function exportSubtitles(): void {
-  const cues = extractSubtitles(store.getDoc());
-  if (cues.length === 0) {
-    store.pushError(makeError('E_INVALID_PROJECT', '工程里还没有字幕片段'));
-    return;
-  }
-  const blob = new Blob([serializeSrt(cues)], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `${store.getDoc().name.trim() || 'veditor'}.srt`;
-  link.rel = 'noopener';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
 
 /**
  * 导入工程文件（R-054）。
@@ -446,7 +398,7 @@ async function importProjectFile(file: File): Promise<void> {
               role="menuitem"
               onClick={() => {
                 setProjectMenuOpen(false);
-                exportSubtitles();
+                void exportSrt();
               }}
             >
               导出字幕（SRT）
@@ -499,7 +451,7 @@ async function importProjectFile(file: File): Promise<void> {
         onChange={(event) => {
           const file = event.target.files?.[0];
           event.target.value = '';
-          if (file !== undefined) void importSubtitles(file);
+          if (file !== undefined) void importSrtFile(file);
         }}
       />
       <input

@@ -15,7 +15,7 @@
  * SRT 用 `HH:MM:SS,mmm`。这里所有换算都走 timebase：
  * 毫秒 → 微秒 → 项目帧，**不允许在别处写 `/1000`**（时基守卫会拦）。
  */
-import type { ClipOperation, Frame, MilliFps, Project } from '../core/types';
+import type { ClipOperation, Frame, MilliFps, Project, TextOrigin } from '../core/types';
 import { createClip, createTextContent } from '../core/types';
 import { textTrackFor } from '../core/placement';
 import { frameToMs as tbFrameToMs, msToFrame as tbMsToFrame } from '../core/timebase';
@@ -115,8 +115,10 @@ export function frameToMs(frame: Frame, fpsMilli: MilliFps): number {
 }
 
 export interface SubtitlePlacement {
-  /** 落哪条视频轨（通常是最上面那条）。 */
+  /** 落到哪条轨（`textTrackFor` 给的**文字轨**）。 */
   trackId: string;
+  /** 来源标记（写入 `TextContent.origin`，字幕面板据此显示角标）。 */
+  origin?: TextOrigin;
   /** 字幕文字样式。 */
   fontSize?: number;
   color?: string;
@@ -151,6 +153,7 @@ export function buildSubtitleClips(
           fontSize: placement.fontSize ?? 64,
           color: placement.color ?? '#ffffff',
           align: 'center',
+          origin: placement.origin ?? 'caption',
         }),
         source: 'ui',
       }),
@@ -229,6 +232,8 @@ export interface SubtitleReplacePlan {
 export function buildSubtitleReplaceOps(
   cues: readonly SubtitleCue[],
   doc: Project,
+  /** 来源标记：SRT 导入用 'caption'（默认），语音转写传 'ai'。 */
+  origin: TextOrigin = 'caption',
 ): SubtitleReplacePlan {
   // 先消解重叠：SRT 里允许两条时间轴交叠（双语字幕、工具生成），但落到时间线上
   // 就是同轨重叠的两个文本片段——两行字叠着画，谁都看不清。
@@ -244,7 +249,7 @@ export function buildSubtitleReplaceOps(
       }
     }
   }
-  for (const clip of buildSubtitleClips(resolved.cues, doc, { trackId: placement.trackId })) {
+  for (const clip of buildSubtitleClips(resolved.cues, doc, { trackId: placement.trackId, origin })) {
     ops.push({ op: 'addClip', clip });
   }
   return { ops, trackId: placement.trackId, removed, truncated: resolved.truncated };
