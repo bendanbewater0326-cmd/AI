@@ -500,6 +500,16 @@ export async function capturePreviewStats(region?: PreviewRegion): Promise<{
   maxLuma: number;
   /** 平均亮度：调色这类"整体变化"只能靠它判定（最大亮度会被画面里的纯白字顶住）。 */
   meanLuma: number;
+  /**
+   * 三通道各自的均值。
+   *
+   * 为什么要它：`meanLuma` 判不出"去色"—— 一张彩色画面和它的灰度版**亮度完全一样**。
+   * 「黑白」预设的验收只能靠"三通道均值几乎相等"（彩色画面里天空的蓝和地面的绿
+   * 差异很大，去色后趋同）。
+   */
+  meanR: number;
+  meanG: number;
+  meanB: number;
 } | null> {
   if (engine === null) return null;
   const bitmap = await engine.compositor.captureFrame();
@@ -531,17 +541,32 @@ export async function capturePreviewStats(region?: PreviewRegion): Promise<{
   let nonBlack = 0;
   let maxLuma = 0;
   let sumLuma = 0;
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
   const pixels = data.length / 4;
   for (let i = 0; i + 3 < data.length; i += 4) {
     const r = data[i] ?? 0;
     const g = data[i + 1] ?? 0;
     const b = data[i + 2] ?? 0;
+    sumR += r;
+    sumG += g;
+    sumB += b;
     const luma = 0.299 * r + 0.587 * g + 0.114 * b;
     if (luma > maxLuma) maxLuma = luma;
     sumLuma += luma;
     if (luma > 24) nonBlack += 1;
   }
-  return { nonBlack, total: pixels, maxLuma, meanLuma: pixels > 0 ? sumLuma / pixels : 0 };
+  const safePixels = pixels > 0 ? pixels : 1;
+  return {
+    nonBlack,
+    total: pixels,
+    maxLuma,
+    meanLuma: pixels > 0 ? sumLuma / pixels : 0,
+    meanR: sumR / safePixels,
+    meanG: sumG / safePixels,
+    meanB: sumB / safePixels,
+  };
 }
 
 /** 释放引擎（App 卸载 / 测试清理）。 */

@@ -101,6 +101,13 @@ interface VeditorTestHooks {
     } | null;
     /** 生效中的效果类型（C 批：colorGrade）。 */
     effects: string[];
+    /**
+     * 完整效果对象（含 `params` / `enabled`）。
+     *
+     * `effects` 只有类型字符串，断言不了"饱和度是不是 -100"、"是不是只剩一条"——
+     * 特效面板的验收（同类型单例、参数正确）必须看到参数。
+     */
+    effectDetails: Array<{ type: string; params: Record<string, number | string>; enabled: boolean }>;
     /** 音量与淡化（C 批：R-037）。 */
     audio: { gain: number; fadeInFrames: number; fadeOutFrames: number };
     /** 转场（C2：R-033）。 */
@@ -1059,6 +1066,11 @@ export function App(): ReactElement {
                     stroke: clip.text.stroke ?? null,
                   },
             effects: clip.effects.map((effect) => effect.type),
+            effectDetails: clip.effects.map((effect) => ({
+              type: effect.type,
+              params: { ...effect.params },
+              enabled: effect.enabled,
+            })),
             audio: {
               gain: clip.audio.gain,
               fadeInFrames: clip.audio.fadeInFrames,

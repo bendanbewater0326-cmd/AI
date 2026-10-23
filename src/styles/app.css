@@ -1227,6 +1227,146 @@ body.v-splitter-dragging--y {
   color: var(--v-fg-dim);
 }
 
+/* ---------- 特效面板 ---------- */
+
+.v-effectpanel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 分类 chips：横向可滚（15% 窄栏时 4 个 chip 也会挤） */
+.v-effectpanel__cats {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.v-effectpanel__cats::-webkit-scrollbar {
+  height: 0;
+}
+
+.v-effectpanel__cat {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: transparent;
+  border: 0.5px solid var(--v-border);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.v-effectpanel__cat:hover {
+  color: var(--v-fg);
+  border-color: var(--v-fg-dim);
+}
+
+.v-effectpanel__cat[data-active='true'] {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+/* 网格与文本面板同一套弹性规则：15% / 25% / 40% 三档分别是 1 / 2 / 4 列 */
+.v-effectpanel__grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  align-content: start;
+  scrollbar-width: thin;
+}
+
+.v-fxcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/*
+ * 缩略图舞台。里面是一张真的 canvas（96×54 的素材缩略图套上预设调色），
+ * 不是色块 —— 复古和冷调在色块上完全分不出来。
+ */
+.v-fxcard__stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: #111111;
+}
+
+.v-fxcard__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* 96×54 放大到卡片尺寸：让浏览器平滑插值，别用 pixelated（调色要看颜色过渡） */
+  object-fit: cover;
+}
+
+.v-fxcard:hover .v-fxcard__stage,
+.v-fxcard[data-applied='true'] .v-fxcard__stage {
+  border-color: var(--v-accent);
+}
+
+/* 「已应用」角标：同类型单例，所以最多只有一张卡有 */
+.v-fxcard__badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  color: #ffffff;
+  background: var(--v-accent);
+  border-radius: 50%;
+}
+
+.v-fxcard__name {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v-fxcard[data-applied='true'] .v-fxcard__name {
+  color: var(--v-accent);
+}
+
+.v-fxcard:hover .v-fxcard__name {
+  color: var(--v-fg);
+}
+
+.v-effectpanel__hint {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--v-fg-dim);
+}
+
 .v-assetpanel__empty {
   width: var(--v-thumb-w);
   height: var(--v-thumb-h);

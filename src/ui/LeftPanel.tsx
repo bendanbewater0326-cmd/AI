@@ -34,6 +34,7 @@ import type { ReactElement } from 'react';
 import { AssetPanel } from './AssetPanel';
 import { TextPanel } from './TextPanel';
 import { TransitionPanel } from './TransitionPanel';
+import { EffectPanel } from './EffectPanel';
 
 /** 9 个 Tab 的固定顺序（对齐 opencut-classic 的 TAB_KEYS，去掉我们不做的 adjustment 之外的项）。 */
 export const LEFT_TABS = [
@@ -258,7 +259,11 @@ export function LeftPanel(): ReactElement {
         <div className="v-tabpane__slot" hidden={active !== 'transition'} data-v="transition-content-slot">
           <TransitionPanel />
         </div>
-        {active === 'media' || active === 'text' || active === 'transition' ? null : (
+        {/* 特效面板：同样常驻挂载（分类筛选与缩略图源不必每次重算） */}
+        <div className="v-tabpane__slot" hidden={active !== 'effect'} data-v="effect-content-slot">
+          <EffectPanel />
+        </div>
+        {active === 'media' || active === 'text' || active === 'transition' || active === 'effect' ? null : (
           <TabPlaceholder label={current.label} hint={current.hint} />
         )}
       </div>

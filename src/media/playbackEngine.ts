@@ -47,6 +47,7 @@ import type { DecodedFrame } from './decoderPool';
 import { renderTextLayer } from '../render/textLayer';
 import { clipsNeedingExtraDraw, planTransitions } from './transitionPlan';
 import { animatedValuesAt } from '../core/keyframes';
+import { currentGrade } from '../core/effectTarget';
 import { isTrackAudible, isTrackVisible } from '../core/trackAudibility';
 import { curveOf } from '../render/curve';
 import type { CurveParams } from '../render/curve';
@@ -276,21 +277,15 @@ export interface CreatePlaybackEngineOptions {
   alpha?: boolean;
 }
 
-/** 从 clip.effects 里取调色参数（没有则 null = 不设 uniform，走中性值）。 */
+/**
+ * 从 clip.effects 里取调色参数（没有则 null = 不设 uniform，走中性值）。
+ *
+ * 实现搬到了 `core/effectTarget.currentGrade`：左栏「特效」面板也要读同一份
+ * （判断"这个预设是不是已经应用过"），两处各写一遍迟早会分叉 ——
+ * 分叉的症状是"面板高亮了 A，画面却是 B"。这里只保留一个名字给老的调用方。
+ */
 export function gradeOf(clip: Clip): ColorGrade | null {
-  const effect = clip.effects.find((item) => item.type === 'colorGrade' && item.enabled);
-  if (effect === undefined) return null;
-  const num = (key: string): number => {
-    const raw = effect.params[key];
-    const value = typeof raw === 'number' ? raw : Number(raw);
-    return Number.isFinite(value) ? value : 0;
-  };
-  return {
-    brightness: num('brightness'),
-    contrast: num('contrast'),
-    saturation: num('saturation'),
-    temperature: num('temperature'),
-  };
+  return currentGrade(clip);
 }
 
 /** 文本层画布（带缓存）。 */

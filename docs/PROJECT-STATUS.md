@@ -49,13 +49,13 @@
 | 任务进度 | **T01–T19 全部完成** | 架构 §任务表 |
 | 里程碑 | M1 能跑 / M2 能剪 / M3 导出 / M4 AI / **M5-M6（P2）13/13 全部交付** | — |
 | 批次增强 | A（音频·导出·UI）/ B（M4 AI）/ C1（文字·调色·音量）/ C2（转场·入出点）/ C3（变速·关键帧·剪贴板）全部交付 | — |
-| 源码 | **88 个 ts/tsx**（+ `app.css` = 89 文件 / 35846 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
-| 单测 | **608 条 / 37 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
-| E2E | **60 个 `verify-*.mjs`**（59 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建产物 | `dist/main.js` **663.8KB**（esbuild 单包） | `npm run build` |
-| 时基静态检查 | **扫描 89 个文件，0 处非法换算** | `npm run check` |
+| 源码 | **92 个 ts/tsx**（+ `app.css` = 93 文件 / 36765 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
+| 单测 | **641 条 / 38 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
+| E2E | **61 个 `verify-*.mjs`**（60 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建产物 | `dist/main.js` **673.0KB**（esbuild 单包） | `npm run build` |
+| 时基静态检查 | **扫描 93 个文件，0 处非法换算** | `npm run check` |
 
-> 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存 / 18 文字模板 / 14 转场落点。
+> 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存 / 18 文字模板 / 14 转场落点 / 32 特效预设。
 > 文件数把上面管道的 `xargs wc -l | tail -1` 换成 `wc -l` 即可。
 > 以上是 2026-10-21 复核的实测值；**新增测试时请连同分项与总数一起改**。
 
@@ -2181,6 +2181,68 @@ S1.0 的钩子、S1.1 的顶栏都只是"不挡路"。这一轮才是真正把�
 
 ---
 
+### 3.36 2026-10-23 · 左栏「特效」面板第一步：14 个调色预设 + 点击应用 + 已应用高亮
+
+**摸底结论（决定了这一版只做调色）**：渲染层只认 4 个**画面**效果 ——
+`colorGrade`（4 个连续参数）、`curve`（只有 2 个控制点）、`lut`（要外部 .cube 文件）、
+`mask`（空间挖洞，不是滤镜），外加 1 个音频 `denoise`。**没有**模糊/像素化/光效/故障/锐化/暗角。
+合成顺序硬编码 `transform → grade → curve → LUT → mask`（`Effect.order` 是死字段，全仓库无人读）；
+加第 5 种要改 `Compositor` 接口（WebGL 与 Canvas2D 两套实现）。所以"一键预设"只有一条路：
+`colorGrade` 的参数组合。
+
+**分工**：**特效 = 选风格（预设），调节 = 调数值（滑块）**，两者写同一份 `clip.effects` ——
+在面板点完，属性栏 4 条滑块立刻跟着变（⑥ 断言了这一点），反过来也成立。
+
+**新增三个模块**
+
+| 文件 | 职责 |
+|---|---|
+| `core/effectPresets.ts` | 14 个预设（基础 5 / 冷暖 4 / 风格 5）+ 分类 + `effectPresetsIn`（**原片永远排第一**，切到「风格」也能一键取消特效） |
+| `core/effectTarget.ts` | `currentGrade`（从 `media/playbackEngine` 搬过来，消掉重复实现）/ `resolveEffectTarget` / `buildEffectOps` / `appliedPresetId` |
+| `render/grade.ts` | `GRADE_GLSL` 的 **JS 逐字对应版**，只给缩略图用 |
+
+**三条容易写错的规则**
+
+1. **`setClipEffect` 是同类型单例**（`operations.ts` 先 filter 掉同类型再加）→
+   应用第二个特效是**替换**不是叠加。UI 让它可见：`data-applied` 最多出现在一张卡上，
+   底部提示直说"会替换"。
+2. **「原片」= 删除 effect**，不是"写四个 0 的 effect"。写 0 画面等价，但 `effects` 里会留一条
+   空记录，属性栏显示一个"看起来有特效"的空调色。
+3. **重复点同一个预设不发撤销步**（`buildEffectOps` 返回空数组）——否则撤销栈里堆一步"没变化"。
+
+**缩略图：真画面 + 复算公式，不能用 CSS filter**
+
+源图取工程里视频素材的 IDB 缩略图（96×54，cover 裁切），逐像素套 `GRADE_GLSL` 的同一套公式。
+**不能用 CSS `filter: brightness()`**：CSS 是**乘法**，着色器是 `c += v/200` **加法**，
+`+18` 在两者下完全不是一个效果 —— 缩略图会"说谎"，用户点完觉得"和卡片上不是一个东西"。
+
+> 顺带发现（既有实现，未动）：Canvas2D 降级路径用的正是 `ctx.filter`（`compositor.ts:1245`），
+> 所以**无 WebGL2 时调色与 WebGL 略有差异**。
+
+**踩到的一个真问题**：缩略图读的是 IDB，而 `thumbnailRef` 在导入时**同步**就填好、
+缩略图 blob 却是 `putThumbnail` **异步**写进去的。面板常驻挂载，很可能在 blob 落库前读一次 ——
+读不到就**永久**停在兜底图（`sourceAssetId` 不再变，effect 不重跑）。症状很隐蔽：
+卡片一直显示内置测试图，看起来"正常"，只是和素材无关。修法是读不到就重试（5 次 × 400ms）。
+
+**边界**：文字片段拒绝（属性栏的调色/曲线整块被 `!isText` 包着 —— 加得上、去不掉）；
+音频片段拒绝；没选中时按播放头落点，且**跳过不能加的片段继续往下找**（字幕常常压在视频上，
+直接报"文字片段不支持"会让用户觉得"明明有视频在下面"），整条线都找不到才把第一次遇到的原因说出来。
+
+**验证**：`effect-presets` 32 项单测 + `verify-effect-panel` 16 项 E2E。其中几条值得单说：
+
+```
+③ 黑白后三通道均值趋同（色差 5.3 → 0.0）—— meanLuma 判不出"去色"（灰度版亮度完全一样）
+⑦ 重复点同一预设后撤销一次 → 回到「黑白」而不是"没变化"
+⑩ 缩略图套了同一套公式（亮度 127.6→146.2；暖阳 R133>B126；黑白色差 0.0）
+⑩b 缩略图来自素材本身（色差 5.4，兜底测试图约 12）
+```
+
+**数字**：单测 641 / 38 脚本、E2E 61 个、构建 673.0KB（+9.2KB）。
+
+**特效面板第一步到此完成**，第二步（拖拽 + `effectGhost` 整块片段描边）待做。
+
+---
+
 ## 4. 技术栈
 
 | 层 | 技术 |
@@ -2216,9 +2278,10 @@ src/
               transitionPlan, sourceRegistry, importAsset, importPipeline
               (探测→资产→注册预览源→缩略图，两条导入入口共用), silence, proxy, denoise
   render/     compositor(WebGL2+2D降级), timelinePainter, textLayer,
-              curve, lut, mask, frameTransform(旋转/翻转的纯函数)
+              curve, lut, mask, frameTransform(旋转/翻转的纯函数),
+              grade(GRADE_GLSL 的 JS 对应版，只给特效缩略图用)
   ui/         App, TopBar, LeftPanel(左栏 44px 图标条 + 9 Tab), AssetPanel(素材 Tab),
-              TextPanel(文本 Tab), TransitionPanel(转场 Tab),
+              TextPanel(文本 Tab), TransitionPanel(转场 Tab), EffectPanel(特效 Tab),
               TimelineView, InspectorPanel, CommandBar, ExportDialog, Toast,
               ContextMenu(自绘右键菜单), SelfCheck(应用内自检), timelineController,
               theme, splitter(左/右/时间线 三面板共用：轴 + clamp + 记忆), CacheDialog(缓存池管理)
@@ -2263,7 +2326,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 > 有 33 个 E2E 配了 npm 别名：`e2e:ui`（a-ui）/ `e2e:export`（m3）/ `e2e:ai`（m4）/ `e2e:c1`（c-ui）/ `e2e:c2`（c2-ui）/ `e2e:host`（postmessage）/ `e2e:png`（png-export）/ `e2e:roughcut`（roughcut）/ `e2e:proxy`（proxy）/ `e2e:project`（project-file）/ `e2e:preset`（preset）/ `e2e:touch`（touch-a11y）/ `e2e:denoise`（denoise）/ `e2e:curve`（curve）/ `e2e:lut`（lut）/ `e2e:mask`（mask）/ `e2e:multicam`（multicam）/ `e2e:transcribe`（transcribe）/ `e2e:layout`（layout）/ `e2e:left-tabs`（left-tabs）。
 > 其余直接用 `node tests/verify-xxx.mjs`。
 
-### 单测脚本（`tests/*.test.mjs`，37 个 / 608 条）
+### 单测脚本（`tests/*.test.mjs`，38 个 / 639 条）
 
 | 脚本 | 覆盖 | 条数 |
 |---|---|---|
@@ -2304,9 +2367,10 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `draft-cache` | 草稿缓存池（指纹去重 / 并发 2 / 清理未使用） | 11 |
 | `text-presets` | 文字模板库（10 个模板 / 分类 / 内容覆盖语义 / 分辨率换算） | 18 |
 | `transition-target` | 转场落点（半开区间命中 / 左邻严格相等 / 两侧互斥 / 时长夹取） | 14 |
-| **合计** | | **608** |
+| `effect-presets` | 特效预设（数据合法 / 原片=移除 / 同类型单例 / 落点（含字幕压着视频）/ 像素公式与着色器一致） | 32 |
+| **合计** | | **641** |
 
-### E2E 脚本（`tests/verify-*.mjs`，60 个）
+### E2E 脚本（`tests/verify-*.mjs`，61 个）
 
 | 脚本 | 覆盖 |
 |---|---|
@@ -2347,6 +2411,7 @@ node tests/verify-<name>.mjs   # E2E（每个脚本独立起 dev server + 无头
 | `timeline-height` | **S1.4 时间线高度**：默认占**工作区**（视口 − 顶栏）50%、4px 热区正好压在预览/时间线边界且 `elementFromPoint` 命中自身、拖拽 clamp 15%/70%、刷新记忆、没拖过时**不写行内变量**、拖完片段数与 16:9 预览不变 |
 | `ctrlbar` | **S1.5 控制栏叠画面**：完全落在 16:9 画面内且水平居中、距底 12px、舞台只剩一行（真的不占布局高度）、悬停变实/移出变淡、五个控件齐全、播放键**用真实鼠标点击**（证明没被 canvas 盖住）、逐帧按钮真的改播放头、820px 不溢出 |
 | `transition-panel` | **左栏转场面板**：3 个预设（叠化/淡入/淡出）、时长三档、三种转场各落不同侧、两侧互斥、叠化缺左邻给可读提示且文档不变、1.0s 在短片段上被夹到一半、移除两侧清空、没选中时按播放头落点、**淡入读画面像素**证明真的在画、**拖拽接缝吸附**（左 4px 也落到右段）、红/绿落点预览、拖到空白不落库、**角标宽度按时长**（两次渲染做差） |
+| `effect-panel` | **左栏特效面板**：14 个预设 / 4 个分类、原片固定第一且标记 pinned、**黑白读三通道均值**证明真的去色（meanLuma 判不出来）、同类型单例（换预设是替换）、重复点不发撤销步、属性栏滑块同步、「原片」移除 effect、分类筛选原片仍在第一、**缩略图套同一套公式**且来自素材真画面（不是兜底图）、没选中按播放头、文字片段拒绝、每张卡缩略图非空白 |
 | `text-panel` | **左栏文本面板**：10 个模板顺序/中文名、5 个分类筛选、点击新建落**文字轨**且自动选中、一次撤销连轨一起回退、套样式**保留用户文案**、选中视频片段时新建而不改视频、**拖拽**（ghost 落在文字轨 / 第 120 帧吸附 / 轨道头不接）、**我的预设**（存/用/删/持久化/系统预设无删除按钮/属性栏同步）、缩略图与落片样式同源、**描边/粗体读画面像素**、切 Tab 保分类、15% 窄栏不溢出 |
 | `audio-controls` | 音量滑块立即生效（不用等松手）+ 轨道闸门真的到了音频链路 |
 | `audio-menu` | 右键音频菜单 7 项，导出产物用 `Browser.setDownloadBehavior` 落盘校验文件头 |
@@ -2987,6 +3052,7 @@ D:/项目专用文件夹/剪辑工具/
 | **2026-10-23（UI 重构 S1.5）** | 控制栏叠到画面底部居中（**重构线收官**） | `.v-stage` 改单行、控制栏移进 16:9 画面盒绝对定位；半透明黑 + 模糊 + 8px 圆角，默认 0.55 悬停变实；预览 595×335 → 626×352；顺带修「素材已离线」提示缺定位上下文；补上一帧/下一帧（复用 `transport.seekTo`）；13 项 E2E（`verify-ctrlbar-overlay`） |
 | **2026-10-23（文本面板第一批）** | 左栏「文本」模板库 + 点击应用 | `TextContent` 加 `bold?`/`stroke?`（4 处归一化，漏一处就"存盘丢样式"）；10 个模板 / 5 个分类；**模板坐标按工程分辨率换算**（720p 下 `y=380` 会把字幕推出画面，实测像素全黑）；文字改落**文字轨**（建轨+落片一个撤销步）；属性栏补加粗/描边；18 单测 + 22 项 E2E |
 | **2026-10-23（文本面板第二步）** | 拖拽应用 + 落轨全链路统一 | 模板卡拖到时间线（独立 MIME，ghost 落在文字轨、落点吸附）；`addText` / SRT 导入 / AI 转写全部改走 `ensureTextTrackOps`（`buildSubtitleReplaceOps` 不再返回 null）；**修掉真 bug：文字轨与 V1 的 `order` 撞号 → 文字被视频盖住**（新增 `trackCompositeOrder`，合成顺序 ≠ 屏幕顺序）；26 项 E2E |
+| **2026-10-23（特效面板第一步）** | 14 个调色预设 + 点击应用 + 已应用高亮 | 摸底确认渲染层只认 4 种画面效果且只有调色适合做预设；`effectPresets`（原片=移除、分类里永远第一）+ `effectTarget`（落点 / 同类型单例 / 重复点不发撤销步）+ `render/grade.ts`（**GRADE_GLSL 的 JS 逐字版**）；缩略图用素材真画面，**不能用 CSS filter**（乘法 ≠ 加法）；修掉"缩略图 blob 异步落库，读早了就永久停在兜底图"；32 单测 + 16 项 E2E |
 | **2026-10-23（转场面板第二步）** | 拖拽 + 接缝吸附 + 落点预览 + 角标按时长 | 第三个独立 MIME（带 `预设id\|秒`）；`snapToSeam` ±12px（不吸附会命中左段、叠化直接判不可用）；`ephemeral.transitionGhost` + 加宽楔形（绿/红）；角标从固定 12px 改成按时长（入场算 D/2）；量宽度不能用颜色筛（片段底色本身就是淡紫），改成两次渲染做差；19 项 E2E |
 | **2026-10-23（转场面板第一步）** | 3 种转场 + 时长档位 + 点击应用 | 摸底确认只有 3 种且只有 opacity 自由度；`transitionPresets`（side 写进数据）+ `transitionTarget`（半开区间 / 左邻严格相等 / 两侧互斥 / 时长夹取，属性栏也改调它）；叠化缺左邻给提示不改文档；缩略图纯 DOM 无渐变；14 单测 + 14 项 E2E |
 | **2026-10-23（文本面板第三步）** | 「我的预设」（**文本面板收官**） | 复用 R-053：`capturePreset`/`buildPresetOps`/settings 存储，只做筛选展示；我的预设（主色描边 + 可删）与系统预设（灰边 + 无删除按钮）明确区分；存预设默认名取当前文案；`PRESETS_CHANGED` 广播修掉"左栏存了右栏看不到"；33 项 E2E |
@@ -2996,7 +3062,9 @@ D:/项目专用文件夹/剪辑工具/
 S1.0–S1.5 已全部完成**：布局钩子 / 顶栏 48 / 三栏 25-50-25 / 左栏 9 图标 Tab /
 时间线 50% / 控制栏叠画面。
 当前在做**左栏功能面板**（第一批：文本 → 转场 → 特效）：
-**文本面板三步全部完成**（§3.31–3.33）；**转场面板两步全部完成**（§3.34–3.35）。方案见 `docs/text-panel-plan.md` / `docs/transition-panel-plan.md`。
+**文本面板三步全部完成**（§3.31–3.33）；**转场面板两步全部完成**（§3.34–3.35）；
+**特效面板第一步（14 个预设 + 点击应用 + 已应用高亮）已交付**（§3.36），第二步（拖拽）待做。
+方案见 `docs/text-panel-plan.md` / `docs/transition-panel-plan.md` / `docs/effect-panel-plan.md`。
 
 ---
 
