@@ -1077,6 +1077,196 @@ body.v-splitter-dragging--y {
   border-color: var(--v-accent);
 }
 
+/* ---------- 音频面板（内置音效库） ---------- */
+
+/* 结构与文本面板同一套：chips 行 + 滚动 body + 网格 + 底部提示 */
+.v-sfxpanel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.v-sfxpanel__cats {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.v-sfxpanel__cats::-webkit-scrollbar {
+  height: 0;
+}
+
+.v-sfxpanel__cat {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: transparent;
+  border: 0.5px solid var(--v-border);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.v-sfxpanel__cat:hover {
+  color: var(--v-fg);
+  border-color: var(--v-fg-dim);
+}
+
+.v-sfxpanel__cat[data-active='true'] {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-sfxpanel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  padding-right: 2px;
+}
+
+.v-sfxpanel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+/* 卡片外层：放右上角试听按钮（按钮不能嵌在按钮里） */
+.v-sfxcard-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.v-sfxcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* 按钮是网格项 wrap 里的子元素：按钮默认收缩宽度（实测缩到 11px），必须显式撑满 */
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* 缩略舞台：深底 + 静态波形装饰 + 时长角标（不缩略图——音效没有画面） */
+.v-sfxcard__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: #111111;
+}
+
+.v-sfxcard:hover .v-sfxcard__stage,
+.v-sfxcard__stage[data-playing='true'] {
+  border-color: var(--v-accent);
+}
+
+/* 波形装饰：5 根高低不一的竖条，试听中点亮主色（纯 CSS，无动画依赖） */
+.v-sfxcard__wave {
+  display: flex;
+  align-items: center;
+  gap: 4%;
+  width: 56%;
+  height: 46%;
+}
+
+.v-sfxcard__wave i {
+  flex: 1;
+  height: var(--w, 60%);
+  border-radius: 2px;
+  background: var(--v-fg-dim);
+  opacity: 0.55;
+}
+
+.v-sfxcard__wave i:nth-child(1) { --w: 42%; }
+.v-sfxcard__wave i:nth-child(2) { --w: 78%; }
+.v-sfxcard__wave i:nth-child(3) { --w: 100%; }
+.v-sfxcard__wave i:nth-child(4) { --w: 64%; }
+.v-sfxcard__wave i:nth-child(5) { --w: 30%; }
+
+.v-sfxcard__stage[data-playing='true'] .v-sfxcard__wave i {
+  background: var(--v-accent);
+  opacity: 0.95;
+}
+
+.v-sfxcard__dur {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--v-fg-dim);
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 7px;
+}
+
+.v-sfxcard__name {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.v-sfxcard:hover .v-sfxcard__name {
+  color: var(--v-fg);
+}
+
+/* 试听按钮：卡片右上角，试听中实心主色（一眼能看出"在响"） */
+.v-sfxcard__play {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--v-fg);
+  background: rgba(0, 0, 0, 0.55);
+  border: 0.5px solid var(--v-border);
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.v-sfxcard__play:hover {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+.v-sfxcard__play[data-playing='true'] {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-sfxpanel__hint {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--v-fg-dim);
+}
+
 /* ---------- 转场面板 ---------- */
 
 .v-transitionpanel {

@@ -35,6 +35,7 @@ import { AssetPanel } from './AssetPanel';
 import { TextPanel } from './TextPanel';
 import { TransitionPanel } from './TransitionPanel';
 import { EffectPanel } from './EffectPanel';
+import { AudioPanel } from './audio/AudioPanel';
 import { AdjustPanel } from './adjust/AdjustPanel';
 import { CaptionPanel } from './caption/CaptionPanel';
 import { SettingsPanel } from './settings/SettingsPanel';
@@ -267,6 +268,10 @@ export function LeftPanel(props: LeftPanelProps): ReactElement {
         <div className="v-tabpane__slot" hidden={active !== 'text'} data-v="text-content-slot">
           <TextPanel />
         </div>
+        {/* 音频面板（轻量版=内置音效库）：常驻挂载，试听与分类态不因切 Tab 丢失 */}
+        <div className="v-tabpane__slot" hidden={active !== 'audio'} data-v="audio-content-slot">
+          <AudioPanel />
+        </div>
         <div className="v-tabpane__slot" hidden={active !== 'transition'} data-v="transition-content-slot">
           <TransitionPanel />
         </div>
@@ -294,6 +299,7 @@ export function LeftPanel(props: LeftPanelProps): ReactElement {
           <SettingsPanel buildId={buildId} />
         </div>
         {active === 'media' ||
+        active === 'audio' ||
         active === 'text' ||
         active === 'transition' ||
         active === 'effect' ||
