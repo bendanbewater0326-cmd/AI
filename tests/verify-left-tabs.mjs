@@ -196,14 +196,15 @@ try {
 
   // ---- ⑤ 未实现的 Tab 逐个点：都要给出对应的中文提示 ----
   /**
-   * 「文本」「转场」「特效」已经换成真面板，不再走占位 —— 文本单独验（⑤b），
-   * 转场见 verify-transition-panel，特效见 verify-effect-panel。
-   * 每做完一个 Tab 就把这里减一个，别让"占位列表"和实际实现脱节。
+   * 「文本」「转场」「特效」「调节」「字幕」「设置」已经换成真面板，不再走占位。
+   * 文本单独验（⑤b），转场见 verify-transition-panel，特效见 verify-effect-panel，
+   * 调节见 verify-adjust，字幕见 verify-caption，设置见 verify-settings。
+   * **每做完一个 Tab 就把这里减一个**，别让"占位列表"和实际实现脱节
+   * （10-23 就因为漏减「字幕」「调节」而红了 2 项）。
    */
+  const DONE = ['text', 'transition', 'effect', 'adjust', 'caption', 'settings'];
   const placeholders = [];
-  for (const [key, label] of EXPECTED.slice(1).filter(
-    ([tabKey]) => tabKey !== 'text' && tabKey !== 'transition' && tabKey !== 'effect',
-  )) {
+  for (const [key, label] of EXPECTED.slice(1).filter(([tabKey]) => !DONE.includes(tabKey))) {
     await click(`[data-v="left-tab-${key}"]`);
     const text = await page.session.evaluate(
       'document.querySelector(\'[data-v="tab-placeholder-title"]\')?.textContent || ""',
@@ -211,8 +212,8 @@ try {
     placeholders.push(`${label}:${String(text).trim() === `${label}功能开发中` ? '✓' : `✗(${text})`}`);
   }
   report.check(
-    `⑤ 5 个未实现 Tab 各自给出「功能开发中」（${placeholders.join(' ')}）`,
-    placeholders.every((item) => item.endsWith('✓')),
+    `⑤ ${placeholders.length} 个未实现 Tab 各自给出「功能开发中」（${placeholders.join(' ')}）`,
+    placeholders.length > 0 && placeholders.every((item) => item.endsWith('✓')),
   );
 
   // ---- ⑤b「文本」是已实现的面板：没有占位、有模板卡片 ----
@@ -251,7 +252,9 @@ try {
   await sleep(1200);
   report.check(
     `⑦ 刷新后仍停在「字幕」（实测 ${await leftTab()}）`,
-    (await leftTab()) === 'caption' && (await visible('[data-v="tab-placeholder"]')) === true,
+    // 字幕现在是真面板（C2–C5），不再有占位 —— 断言要跟着实现改，
+    // 否则"面板做好了"反而让测试变红（本行 10-23 就是这样过期了一次）。
+    (await leftTab()) === 'caption' && (await visible('[data-v="caption-panel"]')) === true,
   );
 
   // ---- ⑧ 折叠左栏：图标条一起消失（不能只藏内容区）----

@@ -5,6 +5,12 @@ declare module '*.webp';
 declare module '*.png';
 
 /**
+ * 版本号由构建脚本注入（`scripts/build.mjs` / `scripts/dev.mjs` 的 esbuild `define`，
+ * 值取自 `package.json` 的 `version`）—— 前端不再手写一份版本字符串。
+ */
+declare const __APP_VERSION__: string;
+
+/**
  * `gifenc` 没有随包提供 .d.ts（也不在 DefinitelyTyped 上），这里只声明本项目用到的三个入口。
  * 参数按包内实现标注：`quantize(rgba, maxColors, opts)` → 调色板；`applyPalette(rgba, palette, format)`
  * → 每像素的索引；`GIFEncoder().writeFrame(index, w, h, opts)`。

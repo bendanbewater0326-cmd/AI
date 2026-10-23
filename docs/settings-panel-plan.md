@@ -233,3 +233,62 @@ interface Prefs {
 | 默认时长改了但已存在的片段被改 | **只影响新建**（拖动/加文字时读取），不改已有片段 |
 | 快捷键表与说明页不同步 | 说明页**不手写**，遍历 `KEY_BINDINGS` |
 | 折叠态与调节面板串味 | 用不同的 storage key（`veditor:settings:openGroups`）|
+
+---
+
+## 10. S2 落地记录（2026-10-23）
+
+**状态：S2 完成** —— 外壳 + 外观 / 缓存 / 关于三组功能；编辑偏好只接了吸附开关；
+快捷键组与「默认素材时长」留给 S3 / S4（**故意留空，不做半成品**：放了控件不接线，
+就是项目里记过的"数据层有、界面没接"）。
+
+### ⚠️ 口径更正：本项目没有「浅色 / 深色」，只有「默认 / 高对比」
+
+S2 需求里写的是"浅色 / 深色二态"，但代码里的事实是：
+
+| 事实 | 位置 |
+|---|---|
+| `Theme = 'default' \| 'contrast'`，就这两态 | `ui/theme.ts` |
+| 一套明亮色板 + 一组 `:root[data-theme='contrast']` 深色覆盖 | `styles/app.css` §高对比主题（R-064） |
+
+所以面板上的二态只能是**「默认 / 高对比」**，与顶栏「工程」菜单里的主题按钮是同一个开关。
+真做"浅色 / 深色"= 给 3946 行 CSS 补一整套 dark 变量并逐屏核对，属独立任务（**待拍板**），
+不在"零底层改动"范围内。
+
+### 与本文前面方案的差异（3 处，都有理由）
+
+1. `prefs.ts` 最终放在 `core/prefs.ts`（方案 §5 写的是 `ui/settings/prefs.ts`）：
+   `store.ts` 初始化要读它，放 `persist/` 会与 `autosave → store` 成环。
+2. 折叠组件新增可选 `storageKey`，**不复制**一份折叠实现：
+   同一套交互、两个 key（`veditor:settings:openGroups` / `veditor:adjust:openGroups`）。
+3. 缓存弹窗由面板自己渲染一个 `<CacheDialog>` 实例（组件原样复用），
+   不把 `cacheOpen` 提到 App —— 提状态要改 TopBar 的 props，代价大于收益。
+
+### 实现清单
+
+| 文件 | 改动 |
+|---|---|
+| `ui/settings/SettingsPanel.tsx` | 新增：五组外壳 + 外观 / 缓存 / 关于 |
+| `ui/settings/clearLocalData.ts` | 新增：清 localStorage（`veditor:` 前缀）+ IndexedDB 整库 + OPFS 缓存池 |
+| `ui/adjust/CollapsibleSection.tsx` | 加 `storageKey?`（默认行为不变）|
+| `ui/theme.ts` | 加 `setTheme()`，`toggleTheme` 委托给它 |
+| `ui/TopBar.tsx` | 导出 `formatBuildTime`（关于组复用，不复刻）|
+| `scripts/build.mjs` / `scripts/dev.mjs` | `define __APP_VERSION__`（源头 = `package.json`）|
+| `styles/app.css` | +236 行 `.v-settings__*`（折叠直接复用 `.v-adjust__*`）|
+| `tests/verify-settings.mjs` | 新增 **22 项** E2E |
+| `tests/verify-left-tabs.mjs` | 修 **2 项过期断言**（字幕 / 调节早已不是占位，动手前它就是红的）|
+
+### 验收（实测）
+
+- `verify-settings` **22/22**（主题属性 / 顶栏按钮 / 分段高亮三者同步；刷新后主题、吸附、折叠态都记住；
+  缓存显示真实占用；清空本地数据必须先确认、取消可退回、确认后工程名回到「未命名工程」）
+- `npm test` **699** / `npm run check` **108 文件 0 违规**
+- 回归：left-tabs / adjust / text-panel / effect-panel / caption / t11 / t14 / layout / timeline-height / panel-leak 全绿
+- 构建 `main.js` 722.2 KB、`main.css` 50.6 KB
+
+### 下一步（S3 / S4）
+
+| 步 | 内容 | 现状 |
+|---|---|---|
+| S3 | 快捷键组（分类 + `<kbd>`）| 数据层 `keymapView` 已就绪、有 16 条单测，只差接线与 E2E |
+| S4 | 编辑偏好里的「默认素材时长」+ 接线两处（文本面板加文字、拖图片/贴纸落轨）| `prefs.defaultClipSeconds` 已就绪，未接线 |

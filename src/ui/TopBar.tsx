@@ -31,7 +31,8 @@ import { exportSrt, importSrtFile } from './caption/actions';
  * 直接 slice 出来显示会让东八区用户看到"比现在早 8 小时"的时间，
  * 误以为页面加载的是旧代码（实测被这个坑过一次）。
  */
-function formatBuildTime(iso: string): string {
+/** 构建时间 → `HH:MM:SS`（顶栏与设置面板共用这一份）。 */
+export function formatBuildTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso.slice(11, 19);
   const pad = (value: number): string => String(value).padStart(2, '0');

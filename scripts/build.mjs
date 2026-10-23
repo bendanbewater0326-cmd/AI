@@ -3,7 +3,7 @@
  * 产物可直接 `cd dist && python -m http.server --bind 127.0.0.1` 访问（file:// 会因安全上下文被阻断，属预期行为）。
  */
 import { build } from 'esbuild';
-import { copyFile, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -14,6 +14,8 @@ const DIST = path.join(ROOT, 'dist');
 const OWN_OUTPUTS = ['main.js', 'main.css', 'index.html'];
 
 async function main() {
+  // 版本号只有一个源头：package.json（注入为 __APP_VERSION__，设置面板「关于」组用）
+  const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
   await mkdir(DIST, { recursive: true });
   for (const file of OWN_OUTPUTS) {
     await rm(path.join(DIST, file), { force: true });
@@ -31,6 +33,7 @@ async function main() {
     loader: { '.css': 'css' },
     define: {
       'process.env.NODE_ENV': '"production"',
+      __APP_VERSION__: JSON.stringify(pkg.version),
     },
     legalComments: 'none',
     logLevel: 'info',

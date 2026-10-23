@@ -3707,3 +3707,239 @@ body.v-caption-tl-dragging * {
   border-radius: 2px;
   z-index: 3;
 }
+
+/* ============================================================
+ * 设置面板（左栏「设置」Tab，S2）
+ *
+ * 折叠分组**复用调节面板的 `.v-adjust__section` 家族**（同一个组件
+ * `ui/adjust/CollapsibleSection`），所以这里只补「设置项」自己的东西：
+ * 行布局 / 二态分段按钮 / 键帽 / 危险操作。
+ * 尺寸沿用 11–12px 的字号与 24px 行高，与其它左栏面板一致。
+ * ============================================================ */
+
+.v-settings-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 「标签 ←→ 值/控件」一行 */
+.v-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.v-settings__label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-settings__value {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--v-fg);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 二态选择（主题）。不用 select：两个选项时点一下就到，比展开下拉快 */
+.v-settings__segmented {
+  flex: 0 0 auto;
+  display: flex;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  overflow: hidden;
+}
+
+.v-settings__segmented button {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  background: var(--v-surface-1);
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.v-settings__segmented button + button {
+  border-left: 0.5px solid var(--v-border);
+}
+
+.v-settings__segmented button:hover:not([data-active='true']) {
+  color: var(--v-fg);
+}
+
+.v-settings__segmented button[data-active='true'] {
+  background: var(--v-accent-weak);
+  color: var(--v-accent);
+  font-weight: 600;
+}
+
+/* 开关行（吸附） */
+.v-settings__switch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.v-settings__switch-row label {
+  font-size: 11px;
+  color: var(--v-fg);
+}
+
+/* 说明文字：比正文小一号、灰一档 —— 说明不是操作项，不该抢视觉 */
+.v-settings__note {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--v-fg-dim);
+}
+
+.v-settings__note strong {
+  color: var(--v-fg);
+  font-weight: 600;
+}
+
+/* 普通按钮（打开缓存管理 / 取消） */
+.v-settings__button {
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-1);
+  color: var(--v-fg);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.v-settings__button:hover:not(:disabled) {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+.v-settings__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 危险操作（清空本地数据）：描边红、悬停填充 —— 不用整块红底，避免误点 */
+.v-settings__danger {
+  align-self: flex-start;
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--v-error);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-1);
+  color: var(--v-error);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.v-settings__danger:hover:not(:disabled) {
+  background: var(--v-error);
+  color: #ffffff;
+}
+
+.v-settings__danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.v-settings__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 二次确认块：必须比普通提示更醒目（红边 + 警示底色） */
+.v-settings__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 0.5px solid var(--v-error);
+  border-radius: var(--v-radius);
+  background: var(--v-warn-bg);
+}
+
+.v-settings__confirm-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--v-error);
+}
+
+.v-settings__confirm-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--v-fg);
+}
+
+/* 键帽（快捷键说明与说明里的 N 键共用） */
+.v-settings__kbd {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  border: 0.5px solid var(--v-border);
+  border-bottom-width: 1.5px;
+  border-radius: 3px;
+  background: var(--v-surface-2);
+  color: var(--v-fg);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* 快捷键分组（S3 起用） */
+.v-settings__key-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v-settings__key-group + .v-settings__key-group {
+  margin-top: 6px;
+}
+
+.v-settings__key-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--v-fg);
+}
+
+.v-settings__key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.v-settings__key-label {
+  min-width: 0;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-settings__caps {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}

@@ -37,6 +37,7 @@ import { TransitionPanel } from './TransitionPanel';
 import { EffectPanel } from './EffectPanel';
 import { AdjustPanel } from './adjust/AdjustPanel';
 import { CaptionPanel } from './caption/CaptionPanel';
+import { SettingsPanel } from './settings/SettingsPanel';
 
 /** 9 个 Tab 的固定顺序（对齐 opencut-classic 的 TAB_KEYS，去掉我们不做的 adjustment 之外的项）。 */
 export const LEFT_TABS = [
@@ -204,10 +205,12 @@ function TabPlaceholder({ label, hint }: { label: string; hint: string }): React
 export interface LeftPanelProps {
   /** 跳播放头（字幕面板点条目要用；由 App 注入 `transport.seekTo`）。 */
   onSeek: (frame: number) => void;
+  /** 构建时间戳（设置面板的「关于」组要显示；由 App 传下来，面板不重复 fetch）。 */
+  buildId: string;
 }
 
 export function LeftPanel(props: LeftPanelProps): ReactElement {
-  const { onSeek } = props;
+  const { onSeek, buildId } = props;
   const [active, setActive] = useState<LeftTabKey>(() => {
     const stored = readStoredTab();
     activeTabMemo = stored;
@@ -283,7 +286,20 @@ export function LeftPanel(props: LeftPanelProps): ReactElement {
         <div className="v-tabpane__slot" hidden={active !== 'caption'} data-v="caption-content-slot">
           <CaptionPanel onSeek={onSeek} />
         </div>
-        {active === 'media' || active === 'text' || active === 'transition' || active === 'effect' || active === 'adjust' || active === 'caption' ? null : (
+        {/*
+          设置面板（S2）：与调节面板共用折叠组件，但**折叠态用另一个 localStorage key**
+          （`veditor:settings:openGroups`）—— 共用 key 会让两边互相改对方的展开状态。
+        */}
+        <div className="v-tabpane__slot" hidden={active !== 'settings'} data-v="settings-content-slot">
+          <SettingsPanel buildId={buildId} />
+        </div>
+        {active === 'media' ||
+        active === 'text' ||
+        active === 'transition' ||
+        active === 'effect' ||
+        active === 'adjust' ||
+        active === 'caption' ||
+        active === 'settings' ? null : (
           <TabPlaceholder label={current.label} hint={current.hint} />
         )}
       </div>

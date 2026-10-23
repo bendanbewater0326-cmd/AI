@@ -35,12 +35,22 @@ export function applyTheme(theme: Theme): void {
   for (const listener of listeners) listener();
 }
 
+/**
+ * 直接设置并持久化（设置面板的二态选择用它）。
+ *
+ * 以前只有 `toggleTheme`，设置面板要"点哪个就是哪个"，就得写
+ * `if (getTheme() !== target) toggleTheme()` —— 那等于把"什么算切换"这条规则
+ * 复制到面板里。统一走 `setTheme`，`toggleTheme` 也委托给它。
+ */
+export async function setTheme(theme: Theme): Promise<Theme> {
+  applyTheme(theme);
+  await defaultDb.put(STORE_SETTINGS, THEME_KEY, theme);
+  return theme;
+}
+
 /** 切换并持久化（下次打开还记得）。 */
 export async function toggleTheme(): Promise<Theme> {
-  const next: Theme = current === 'contrast' ? 'default' : 'contrast';
-  applyTheme(next);
-  await defaultDb.put(STORE_SETTINGS, THEME_KEY, next);
-  return next;
+  return setTheme(current === 'contrast' ? 'default' : 'contrast');
 }
 
 /** 启动时读取上次的主题（读不到就用默认）。 */

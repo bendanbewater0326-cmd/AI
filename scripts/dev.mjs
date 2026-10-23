@@ -6,7 +6,7 @@
  * 且端口被占用时自动 +1。
  */
 import { context } from 'esbuild';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
@@ -38,6 +38,8 @@ async function findFreePort(startPort) {
 
 async function main() {
   // 不整体删除 outdir：Windows 上父进程持有句柄时递归删除会失败，且没必要（esbuild 会覆盖产物）
+  // 与 build.mjs 同一个源头：package.json 的 version（注入为 __APP_VERSION__）
+  const pkg = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
   await mkdir(OUT, { recursive: true });
   await copyFile(path.join(ROOT, 'index.html'), path.join(OUT, 'index.html'));
 
@@ -53,6 +55,7 @@ async function main() {
     sourcemap: 'inline',
     define: {
       'process.env.NODE_ENV': '"development"',
+      __APP_VERSION__: JSON.stringify(pkg.version),
     },
     logLevel: 'info',
     plugins: [

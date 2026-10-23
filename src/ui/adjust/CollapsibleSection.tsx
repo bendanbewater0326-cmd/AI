@@ -9,18 +9,22 @@
  *
  * ## 折叠态持久化
  *
- * 存 `localStorage['veditor:adjust:openGroups']`（JSON 数组）。
+ * 存 `localStorage[storageKey]`（JSON 数组），默认 `veditor:adjust:openGroups`。
  * 刷新后保持用户上次的展开状态 —— 不能每次打开都回到默认（用户展开曲线后
  * 点一下别的 Tab 再回来，又折叠上会很烦）。
+ *
+ * **为什么要 `storageKey` 可选参数（S2）**：设置面板要用同一套交互，但折叠态必须
+ * 与调节面板**互不串味**（`veditor:settings:openGroups`）。复制一份折叠组件会造出
+ * 第二个"展开/折叠"定义点；给同一个组件传不同 key 才符合"规则只有一个定义点"。
  */
 import { useCallback, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
-const STORAGE_KEY = 'veditor:adjust:openGroups';
+const DEFAULT_STORAGE_KEY = 'veditor:adjust:openGroups';
 
-function readOpenGroups(): string[] {
+function readOpenGroups(storageKey: string): string[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (raw === null) return [];
     const parsed: unknown = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
@@ -29,9 +33,9 @@ function readOpenGroups(): string[] {
   }
 }
 
-function writeOpenGroups(groups: string[]): void {
+function writeOpenGroups(storageKey: string, groups: string[]): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(groups));
+    window.localStorage.setItem(storageKey, JSON.stringify(groups));
   } catch {
     // 隐私模式/配额满：折叠记忆失效可接受，不影响功能
   }
@@ -58,10 +62,24 @@ export interface CollapsibleSectionProps {
   variant?: 'panel' | 'plain';
   /** 仅 `panel` 模式有效：`plain` 永远不折叠。 */
   defaultOpen?: boolean;
+  /**
+   * 折叠态存哪个 localStorage key（默认调节面板的）。
+   * 设置面板传 `veditor:settings:openGroups` —— 两处折叠互不影响。
+   */
+  storageKey?: string;
 }
 
 export function CollapsibleSection(props: CollapsibleSectionProps): ReactElement {
-  const { title, groupKey, defaultOpen = false, actions, children, testId, variant = 'panel' } = props;
+  const {
+    title,
+    groupKey,
+    defaultOpen = false,
+    actions,
+    children,
+    testId,
+    variant = 'panel',
+    storageKey = DEFAULT_STORAGE_KEY,
+  } = props;
 
   // 属性栏模式：**复刻既有 DOM**（`.v-inspector__group--section` + `.v-inspector__section`），
   // 保证外观与"不折叠"的交互完全不变。
@@ -79,7 +97,7 @@ export function CollapsibleSection(props: CollapsibleSectionProps): ReactElement
 
   // 懒惰初始化：读一次 localStorage（避免每次渲染都读）
   const [open, setOpen] = useState<boolean>(() => {
-    const stored = readOpenGroups();
+    const stored = readOpenGroups(storageKey);
     if (stored.includes(groupKey)) return true;
     // 没有记录时用默认值；但"默认展开"的分组不写进存储，保持"未选择"语义
     return defaultOpen && !stored.includes(`!${groupKey}`);
@@ -88,13 +106,13 @@ export function CollapsibleSection(props: CollapsibleSectionProps): ReactElement
   const toggle = useCallback((): void => {
     setOpen((previous) => {
       const next = !previous;
-      const stored = readOpenGroups().filter((item) => item !== groupKey && item !== `!${groupKey}`);
+      const stored = readOpenGroups(storageKey).filter((item) => item !== groupKey && item !== `!${groupKey}`);
       // 展开的存裸 key、折叠的存 `!key` —— 否则"用户主动折叠了默认展开的分组"记不住
       stored.push(next ? groupKey : `!${groupKey}`);
-      writeOpenGroups(stored);
+      writeOpenGroups(storageKey, stored);
       return next;
     });
-  }, [groupKey]);
+  }, [groupKey, storageKey]);
 
   return (
     <section className="v-adjust__section" data-v={testId} data-open={open ? 'true' : 'false'}>

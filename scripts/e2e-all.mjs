@@ -84,6 +84,29 @@ function scriptList() {
   return [...first, ...fast, ...slow];
 }
 
+/**
+ * 子进程的 node 参数。
+ *
+ * **为什么要这个函数**：Node 20 的全局 `WebSocket` 是实验特性，不加
+ * `--experimental-websocket` 就是 `ReferenceError: WebSocket is not defined`
+ * （`tests/cdp.mjs` 用它连 CDP）—— 表现为**所有 E2E 全红**，而且长得很像"代码坏了"。
+ * Node 22 里 WebSocket 已经是内置全局，但 22 不保证还认这个 flag，
+ * 所以先探测本进程有没有全局 WebSocket，没有才补 flag。
+ */
+function nodeArgsFor(scriptPath) {
+  /**
+   * 判断“子进程需不需要这个 flag”。
+   *
+   * 注意不能只看 `typeof WebSocket === 'undefined'`：**父进程带了 flag 时它就有 WebSocket**，
+   * 于是子进程反而漏传 → 第一个版本就这么错过一次（全量 64 个脚本 62 红，全是
+   * `ReferenceError: WebSocket is not defined`，看起来像代码全坏了）。
+   * 所以：没有全局就补，**或者父进程本身就是靠 flag 拿到的**（说明这版 node 还认这个 flag）。
+   */
+  const inheritedFlag = process.execArgv.some((arg) => arg.includes('experimental-websocket'));
+  const needsFlag = typeof WebSocket === 'undefined' || inheritedFlag;
+  return needsFlag ? ['--experimental-websocket', scriptPath] : [scriptPath];
+}
+
 /** 跑一个脚本，返回 { ok, ms, tail }。 */
 function runOne(name) {
   return new Promise((resolve) => {
@@ -93,7 +116,7 @@ function runOne(name) {
     delete env.CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR;
     delete env.CODEBUDDY_TOOL_CALL_ID;
 
-    const child = spawn(process.execPath, [path.join('tests', name)], {
+    const child = spawn(process.execPath, nodeArgsFor(path.join('tests', name)), {
       cwd: ROOT,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -1382,7 +1382,7 @@ export function App(): ReactElement {
           data-left-collapsed={collapsed.left}
           data-right-collapsed={collapsed.right}
         >
-          <LeftPanel onSeek={(frame) => transport.seekTo(frame, 'exact')} />
+          <LeftPanel buildId={buildId} onSeek={(frame) => transport.seekTo(frame, 'exact')} />
           <Splitter
             side="left"
             collapsed={collapsed.left}

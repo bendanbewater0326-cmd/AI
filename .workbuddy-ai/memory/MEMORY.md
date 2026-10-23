@@ -25,12 +25,12 @@
 
 | 维度 | 实测值 | 复现 |
 |---|---|---|
-| 源码 | **92 个 ts/tsx / 37002 行**（93 文件含 app.css） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
-| 单测 | **641 条 / 38 脚本全绿** | `npm test` |
-| E2E | **61 个 `verify-*.mjs`** | `ls tests/verify-*.mjs \| wc -l` |
-| 构建 | `main.js` **675.5KB** + `main.css` 35.9KB | `npm run build` |
-| 时基守卫 | **93 文件 0 违规** | `npm run check` |
-| git | 工作区干净、13 提交、`.git` 仅 23M | `git status --short` |
+| 源码 | **105 个 ts/tsx / 3.3 万行**（108 文件含 app.css） | `Get-ChildItem -Recurse src -Include *.ts,*.tsx` |
+| 单测 | **699 条 / 40 脚本全绿** | `npm test` |
+| E2E | **62 个 `verify-*.mjs`**（S2 新增 `verify-settings`） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建 | `main.js` **722.2KB** + `main.css` 50.6KB | `npm run build` |
+| 时基守卫 | **108 文件 0 违规** | `npm run check` |
+| git | 工作区干净、21 提交、`.git` 仅 23M | `git status --short` |
 
 > 数字会过期。**改功能时连数字和命令一起改**，别再写死快照。
 
@@ -38,7 +38,7 @@
 
 | 有真实内容 | 仍是 `TabPlaceholder` 占位 |
 |---|---|
-| 素材 / 文本 / 转场 / 特效 | **音频 / 贴纸 / 字幕 / 调节 / 设置** |
+| 素材 / 文本 / 转场 / 特效 / 调节 / 字幕 / 设置 | **音频 / 贴纸** |
 
 ## 长期约定（跨会话遵守）
 
@@ -124,7 +124,7 @@
    R-056 无自动跟踪 / R-057 无说话人识别（用音频能量近似）/ R-058 无色域转换 /
    R-059 客户端不做 ASR，但**通道已通**（宿主实现 `AIModelPort.transcribe` 即可）。
 2. **VFR 素材节奏不精确**：线性帧号映射假设 CFR，总时长对、内容有拉伸。
-3. **5 个左栏 Tab 是空壳**（音频/贴纸/字幕/调节/设置）—— 待补齐。
+3. **2 个左栏 Tab 是空壳**（音频 / 贴纸）—— 待补齐。
 4. **特效面板没有"我的预设"**（文本面板有；计划里写"第三步再说"但已标收官）。
 5. **云 LLM 未做真实联调**（代码就绪，缺云环境）。
 
@@ -301,10 +301,13 @@
 
 ```bash
 cd "D:/项目专用文件夹/剪辑工具"
-npm test            # 641 单测 / 38 脚本
-npm run check       # 类型 + 时基静态扫描（93 文件）
+npm test            # 699 单测 / 40 脚本
+npm run check       # 类型 + 时基静态扫描（108 文件）
 npm run build       # 构建（看 dist/main.js 体积）
 npm run e2e                       # 全量 E2E（约 10 分钟，交付前必跑）
+# ！本机（Chatbox + PowerShell）注意：`node` 是个包装函数，跑**脚本文件**时会吞掉 stdout；
+#   而 nvm 的 node.exe 是 v20（无全局 WebSocket）。所以单跑 E2E 用：
+#   node.exe --experimental-websocket tests/verify-xxx.mjs
 node tests/verify-realworld.mjs   # 真实素材回归（最全面）
 node tests/verify-panel-leak.mjs  # 宿主集成回归
 node tests/verify-postmessage.mjs # 宿主命令通道
