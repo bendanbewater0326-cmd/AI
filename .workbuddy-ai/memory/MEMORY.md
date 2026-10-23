@@ -30,7 +30,7 @@
 | E2E | **64 个 `verify-*.mjs`**（S2 新增 `verify-settings`；全量 64/64，11.2 分钟） | `ls tests/verify-*.mjs \| wc -l` |
 | 构建 | `main.js` **722.2KB** + `main.css` 50.6KB | `npm run build` |
 | 时基守卫 | **108 文件 0 违规** | `npm run check` |
-| git | 工作区干净、21 提交、`.git` 仅 23M | `git status --short` |
+| git | 工作区干净、**28 提交**（领先 origin 18）、`.git` 20.6M | `git status --short` |
 
 > 数字会过期。**改功能时连数字和命令一起改**，别再写死快照。
 
@@ -96,6 +96,10 @@
   协议在 `core/types.ts`，实现在 `host/commands.ts`；入站工程必须过 `projectInput.ts` 归一化
 - **接入方式不是互斥的，别再写成 if/else 二选一**：`pickAdapter()` 曾先判 `?src=` →
   "iframe + ?src=" 既没有命令通道也发不出 `ready`
+
+- **主题只有「默认 / 高对比」二态**，不做常规深色主题（2026-10-23 用户拍板进 **P2 长期队列**：
+  要补近 4000 行 CSS 的整套 dark 变量 + 逐屏核对，收益不匹配；高对比已覆盖弱光诉求）。
+  设置面板与顶栏「工程」菜单是**同一个开关**（`ui/theme.setTheme`），`toggleTheme` 委托它。
 
 ### 素材恢复：缓存池是终极兜底（2026-10-22 验收通过，用户确认三条原则）
 
