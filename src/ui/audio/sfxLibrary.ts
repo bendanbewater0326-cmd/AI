@@ -61,7 +61,7 @@ export interface SfxPreset {
 export const SFX_PRESETS: SfxPreset[] = [
   { id: 'ding', name: '叮', fileName: '音效·叮.m4a', category: 'cue', seconds: 0.6, dataUrl: dingDataUrl },
   { id: 'dong', name: '咚', fileName: '音效·咚.m4a', category: 'cue', seconds: 0.7, dataUrl: dongDataUrl },
-  { id: 'beep', name: '滴·短', fileName: '音效·滴短.m4a', category: 'cue', seconds: 0.15, dataUrl: beepDataUrl },
+  { id: 'beep', name: '滴·短', fileName: '音效·滴短.m4a', category: 'cue', seconds: 0.3, dataUrl: beepDataUrl },
   {
     id: 'double-beep',
     name: '双响提示',
