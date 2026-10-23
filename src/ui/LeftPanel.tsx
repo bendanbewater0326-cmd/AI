@@ -35,6 +35,7 @@ import { AssetPanel } from './AssetPanel';
 import { TextPanel } from './TextPanel';
 import { TransitionPanel } from './TransitionPanel';
 import { EffectPanel } from './EffectPanel';
+import { AdjustPanel } from './adjust/AdjustPanel';
 
 /** 9 个 Tab 的固定顺序（对齐 opencut-classic 的 TAB_KEYS，去掉我们不做的 adjustment 之外的项）。 */
 export const LEFT_TABS = [
@@ -263,7 +264,15 @@ export function LeftPanel(): ReactElement {
         <div className="v-tabpane__slot" hidden={active !== 'effect'} data-v="effect-content-slot">
           <EffectPanel />
         </div>
-        {active === 'media' || active === 'text' || active === 'transition' || active === 'effect' ? null : (
+        {/*
+          调节面板：与特效面板**共用同一份 clip.effects** ——
+          特效选风格、调节调数值，任一侧改动另一侧立刻同步。
+          同样常驻挂载：折叠态与拖动中的值不必每次切 Tab 就重置。
+        */}
+        <div className="v-tabpane__slot" hidden={active !== 'adjust'} data-v="adjust-content-slot">
+          <AdjustPanel />
+        </div>
+        {active === 'media' || active === 'text' || active === 'transition' || active === 'effect' || active === 'adjust' ? null : (
           <TabPlaceholder label={current.label} hint={current.hint} />
         )}
       </div>

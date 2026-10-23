@@ -2829,3 +2829,248 @@ body.v-track-dragging .v-track-head {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* ============================================================
+ * 调节面板（左栏「调节」Tab）与共享参数行
+ *
+ * 这些类只在 `ui/adjust/` 里用。属性栏以后（S5）也会引用同一套，
+ * 所以尺寸用相对单位 + grid，不写死像素宽度。
+ * ============================================================ */
+
+.v-adjust-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 目标片段提示条（未选中时按播放头定位；都没有时禁用） */
+.v-adjust__hint {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--v-fg-dim);
+  background: var(--v-surface-2);
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  padding: 6px 8px;
+}
+
+.v-adjust__hint[data-tone="warn"] {
+  color: var(--v-warn, #b45309);
+}
+
+/* ---- 分组 ---- */
+
+.v-adjust__section {
+  flex: 0 0 auto;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-1);
+  overflow: hidden;
+}
+
+.v-adjust__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 0;
+  background: var(--v-surface-2);
+}
+
+.v-adjust__toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--v-fg);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.v-adjust__toggle:hover {
+  background: var(--v-surface-3, rgba(0, 0, 0, 0.03));
+}
+
+.v-adjust__caret {
+  width: 10px;
+  flex: 0 0 auto;
+  color: var(--v-fg-dim);
+  font-size: 10px;
+}
+
+.v-adjust__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-adjust__actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 分组标题右侧的小按钮（重置 / 移除） */
+.v-adjust__mini {
+  height: 20px;
+  padding: 0 6px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-1);
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.v-adjust__mini:hover:not(:disabled) {
+  color: var(--v-fg);
+  border-color: var(--v-accent);
+}
+
+.v-adjust__mini:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.v-adjust__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+/* ---- 参数行：标签 / 滑块 / 数值 / 附加 ---- */
+
+.v-adjust__row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 48px auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.v-adjust__label {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-adjust__range {
+  width: 100%;
+  min-width: 0;
+  height: 16px;
+  accent-color: var(--v-accent);
+}
+
+.v-adjust__number {
+  width: 100%;
+  height: 20px;
+  padding: 0 4px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-2);
+  color: var(--v-fg);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.v-adjust__number:focus {
+  outline: 1px solid var(--v-accent);
+  outline-offset: -1px;
+}
+
+.v-adjust__number:disabled,
+.v-adjust__range:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.v-adjust__extra {
+  display: flex;
+  align-items: center;
+}
+
+/* 蒙版的形状下拉（占满一行） */
+.v-adjust__select-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.v-adjust__select {
+  width: 100%;
+  height: 22px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-2);
+  color: var(--v-fg);
+  font-size: 11px;
+}
+
+/* 开关（反转） */
+.v-adjust__switch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.v-adjust__switch-row label {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+/* 空态（未选中片段 / 组内无内容） */
+.v-adjust__empty {
+  padding: 10px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--v-fg-dim);
+  text-align: center;
+}
+
+/*
+ * `AdjustRow` 的 stack 布局：属性栏用它**复刻原有纵向样式**
+ * （标签在上 / 滑块占满 / 数值右下）。
+ *
+ * 为什么不直接让属性栏也用 inline：属性栏原本就是纵向排列，
+ * 改成横向虽然是"更紧凑"，但属于用户可感知的界面变化（S5 要求"无感知升级"）。
+ */
+.v-adjust__stack {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v-adjust__stack .v-adjust__label {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-adjust__stack .v-adjust__range {
+  width: 100%;
+}
+
+.v-adjust__stack .v-adjust__number {
+  align-self: flex-end;
+  width: 56px;
+  height: 18px;
+  text-align: right;
+}

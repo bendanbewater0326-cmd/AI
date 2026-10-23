@@ -35,6 +35,8 @@ import type { DenoiseParams } from '../media/denoise';
 import { curveOf, NEUTRAL_CURVE } from '../render/curve';
 import type { CurveParams } from '../render/curve';
 import { LUT_EFFECT, parseCube } from '../render/lut';
+import { AdjustRow } from './adjust/AdjustRow';
+import { CollapsibleSection } from './adjust/CollapsibleSection';
 import { DEFAULT_MASK, MASK_EFFECT, maskOf } from '../render/mask';
 import type { MaskParams, MaskShape } from '../render/mask';
 import {
@@ -964,84 +966,81 @@ export function InspectorPanel(): ReactElement {
 
       {!disabled && !isText ? (
         <>
-          <div className="v-inspector__group v-inspector__group--section">
-            <span className="v-inspector__section">调色</span>
-          </div>
-          {([
-            ['brightness', '亮度'],
-            ['contrast', '对比'],
-            ['saturation', '饱和'],
-            ['temperature', '色温'],
-          ] as Array<[keyof ColorGrade, string]>).map(([key, label]) => (
-            <div className="v-inspector__group" key={key}>
-              <label className="v-inspector__label" htmlFor={`v-inspector-${key}`}>{label}</label>
-              <input
-                id={`v-inspector-${key}`}
-                className="v-inspector__control"
-                data-v={`inspector-${key}`}
-                type="range"
+          <CollapsibleSection
+            title="调色"
+            groupKey="inspector:grade"
+            testId="inspector-section-grade"
+            variant="plain"
+          >
+            {([
+              ['brightness', '亮度'],
+              ['contrast', '对比'],
+              ['saturation', '饱和'],
+              ['temperature', '色温'],
+            ] as Array<[keyof ColorGrade, string]>).map(([key, label]) => (
+              <AdjustRow
+                key={key}
+                label={label}
+                testId={`inspector-${key}`}
+                layout="stack"
+                value={grade[key]}
                 min={-100}
                 max={100}
                 step={1}
-                value={grade[key]}
-                onChange={(event) => setGrade({ ...grade, [key]: Number(event.target.value) })}
-                onPointerUp={() => commitGrade({ [key]: grade[key] } as Partial<ColorGrade>)}
+                onChange={(next) => setGrade({ ...grade, [key]: next })}
+                onCommit={(next) => commitGrade({ [key]: next } as Partial<ColorGrade>)}
               />
-              <span className="v-inspector__value" data-v={`inspector-${key}-value`}>{grade[key]}</span>
-            </div>
-          ))}
+            ))}
+          </CollapsibleSection>
         </>
       ) : null}
 
       {!disabled && !isText ? (
         <>
-          <div className="v-inspector__group v-inspector__group--section">
-            <span className="v-inspector__section">曲线</span>
-          </div>
-          <div className="v-inspector__group">
-            <label className="v-inspector__label" htmlFor="v-inspector-curve-shadow">暗部</label>
-            <input
-              id="v-inspector-curve-shadow"
-              className="v-inspector__control"
-              data-v="inspector-curve-shadow"
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
+          <CollapsibleSection
+            title="曲线"
+            groupKey="inspector:curve"
+            testId="inspector-section-curve"
+            variant="plain"
+          >
+            <AdjustRow
+              label="暗部"
+              testId="inspector-curve-shadow"
+              layout="stack"
               value={curve.y1}
-              onChange={(event) => setCurve({ ...curve, y1: Number(event.target.value) })}
-              onPointerUp={() => commitCurve({ y1: curve.y1 })}
-            />
-            <span className="v-inspector__value" data-v="inspector-curve-shadow-value">
-              {Math.round(curve.y1 * 100)}
-            </span>
-          </div>
-          <div className="v-inspector__group">
-            <label className="v-inspector__label" htmlFor="v-inspector-curve-highlight">亮部</label>
-            <input
-              id="v-inspector-curve-highlight"
-              className="v-inspector__control"
-              data-v="inspector-curve-highlight"
-              type="range"
               min={0}
-              max={1}
-              step={0.01}
-              value={curve.y2}
-              onChange={(event) => setCurve({ ...curve, y2: Number(event.target.value) })}
-              onPointerUp={() => commitCurve({ y2: curve.y2 })}
+              max={100}
+              step={1}
+              toDisplay={(raw) => Math.round(raw * 100)}
+              fromDisplay={(shown) => shown / 100}
+              onChange={(next) => setCurve({ ...curve, y1: next })}
+              onCommit={(next) => commitCurve({ y1: next })}
             />
-            <span className="v-inspector__value" data-v="inspector-curve-highlight-value">
-              {Math.round(curve.y2 * 100)}
-            </span>
-          </div>
+            <AdjustRow
+              label="亮部"
+              testId="inspector-curve-highlight"
+              layout="stack"
+              value={curve.y2}
+              min={0}
+              max={100}
+              step={1}
+              toDisplay={(raw) => Math.round(raw * 100)}
+              fromDisplay={(shown) => shown / 100}
+              onChange={(next) => setCurve({ ...curve, y2: next })}
+              onCommit={(next) => commitCurve({ y2: next })}
+            />
+          </CollapsibleSection>
         </>
       ) : null}
 
       {!disabled && !isText ? (
         <>
-          <div className="v-inspector__group v-inspector__group--section">
-            <span className="v-inspector__section">蒙版</span>
-          </div>
+          <CollapsibleSection
+            title="蒙版"
+            groupKey="inspector:mask"
+            testId="inspector-section-mask"
+            variant="plain"
+          >
           {mask === null ? (
             <div className="v-inspector__group v-inspector__group--tight">
               <button
@@ -1079,31 +1078,28 @@ export function InspectorPanel(): ReactElement {
                 </label>
               </div>
               {([
-                ['x', '左', 0, 1],
-                ['y', '上', 0, 1],
-                ['w', '宽', 0.02, 1],
-                ['h', '高', 0.02, 1],
-                ['feather', '羽化', 0, 0.5],
+                // 内部下限：x/y 从 0、w/h 从 0.02（避免宽高为 0 变成不可见的挖洞）、羽化上限 0.5
+                ['x', '左', 0, 100],
+                ['y', '上', 0, 100],
+                ['w', '宽', 2, 100],
+                ['h', '高', 2, 100],
+                ['feather', '羽化', 0, 50],
               ] as Array<[keyof MaskParams & ('x' | 'y' | 'w' | 'h' | 'feather'), string, number, number]>).map(
                 ([key, label, min, max]) => (
-                  <div className="v-inspector__group" key={key}>
-                    <label className="v-inspector__label" htmlFor={`v-inspector-mask-${key}`}>{label}</label>
-                    <input
-                      id={`v-inspector-mask-${key}`}
-                      className="v-inspector__control"
-                      data-v={`inspector-mask-${key}`}
-                      type="range"
-                      min={min}
-                      max={max}
-                      step={0.01}
-                      value={mask[key]}
-                      onChange={(event) => setMask({ ...mask, [key]: Number(event.target.value) })}
-                      onPointerUp={() => commitMask({ [key]: mask[key] }, '调整蒙版')}
-                    />
-                    <span className="v-inspector__value" data-v={`inspector-mask-${key}-value`}>
-                      {Math.round(mask[key] * 100)}
-                    </span>
-                  </div>
+                  <AdjustRow
+                    key={key}
+                    label={label}
+                    testId={`inspector-mask-${key}`}
+                    layout="stack"
+                    value={mask[key] as number}
+                    min={min}
+                    max={max}
+                    step={1}
+                    toDisplay={(raw) => Math.round(raw * 100)}
+                    fromDisplay={(shown) => shown / 100}
+                    onChange={(next) => setMask({ ...mask, [key]: next })}
+                    onCommit={(next) => commitMask({ [key]: next }, '调整蒙版')}
+                  />
                 ),
               )}
               <div className="v-inspector__group v-inspector__group--tight">
@@ -1118,14 +1114,18 @@ export function InspectorPanel(): ReactElement {
               </div>
             </>
           )}
+          </CollapsibleSection>
         </>
       ) : null}
 
       {!disabled && !isText ? (
         <>
-          <div className="v-inspector__group v-inspector__group--section">
-            <span className="v-inspector__section">LUT</span>
-          </div>
+          <CollapsibleSection
+            title="LUT"
+            groupKey="inspector:lut"
+            testId="inspector-section-lut"
+            variant="plain"
+          >
           <div className="v-inspector__group v-inspector__group--tight">
             <label className="v-inspector__kf" style={{ cursor: 'pointer' }}>
               <span aria-hidden="true">＋</span> 载入 .cube
@@ -1146,25 +1146,21 @@ export function InspectorPanel(): ReactElement {
             </span>
           </div>
           {lutTitle !== '' ? (
-            <div className="v-inspector__group">
-              <label className="v-inspector__label" htmlFor="v-inspector-lut-strength">强度</label>
-              <input
-                id="v-inspector-lut-strength"
-                className="v-inspector__control"
-                data-v="inspector-lut-strength"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={lutStrength}
-                onChange={(event) => setLutStrength(Number(event.target.value))}
-                onPointerUp={() => commitLutStrength(lutStrength)}
-              />
-              <span className="v-inspector__value" data-v="inspector-lut-strength-value">
-                {Math.round(lutStrength * 100)}%
-              </span>
-            </div>
+            <AdjustRow
+              label="强度"
+              testId="inspector-lut-strength"
+              layout="stack"
+              value={lutStrength}
+              min={0}
+              max={100}
+              step={5}
+              toDisplay={(raw) => Math.round(raw * 100)}
+              fromDisplay={(shown) => shown / 100}
+              onChange={(next) => setLutStrength(next)}
+              onCommit={(next) => commitLutStrength(next)}
+            />
           ) : null}
+          </CollapsibleSection>
         </>
       ) : null}
 
