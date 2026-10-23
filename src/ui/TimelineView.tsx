@@ -71,21 +71,27 @@ import type { ContextMenuItem, ContextMenuState } from './ContextMenu';
 import { formatTimecode } from './TopBar';
 import {
   clearDraggingAsset,
+  clearDraggingEffect,
   clearDraggingText,
   clearDraggingTransition,
   getDraggingAssetId,
+  getDraggingEffectId,
   getDraggingTextId,
   getDraggingTransition,
   hasAssetDrag,
+  hasEffectDrag,
   hasTextDrag,
   hasTransitionDrag,
   readAssetDrag,
+  readEffectDrag,
   readTextDrag,
   readTransitionDrag,
 } from './dnd';
 import { TEXT_CLIP_SECONDS, presetToText, textPresetById } from '../core/textPresets';
 import { transitionPresetById } from '../core/transitionPresets';
 import { buildTransitionOps, clipAtFrame, resolveDuration, resolveTransitionTarget, snapToSeam } from '../core/transitionTarget';
+import { effectPresetById } from '../core/effectPresets';
+import { buildEffectOps, resolveEffectTarget } from '../core/effectTarget';
 
 /**
  * 拖转场时的接缝吸附半径（px）。
@@ -182,10 +188,12 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   useEffect(() => {
     const cleanup = (): void => {
       clearDraggingAsset();
+      clearDraggingEffect();
       clearDraggingText();
       clearDraggingTransition();
       if (store.getEphemeral().dropGhost !== null) store.setDropGhost(null);
       if (store.getEphemeral().transitionGhost !== null) store.setTransitionGhost(null);
+      if (store.getEphemeral().effectGhost !== null) store.setEffectGhost(null);
     };
     window.addEventListener('dragend', cleanup);
     window.addEventListener('drop', cleanup);
@@ -535,6 +543,11 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     message?: string;
   };
 
+  /** 拖特效的结果：要么给操作，要么给可读原因（与 `buildPlaceAssetOps` 同一种形状）。 */
+  type EffectDropPlan =
+    | { clipId: string; ops: ClipOperation[] }
+    | { clipId: string; message: string };
+
   /**
    * 拖**文字模板**的落点计划。
    *
@@ -604,7 +617,48 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     return { clipId: clip.id, side: resolved.side, durationFrames: visualFrames, ops };
   }
 
+  /**
+   * 拖**画面特效**的落点计划。
+   *
+   * 与点击应用**共用同一份规则**（`resolveEffectTarget` + `buildEffectOps`）：
+   * 拖拽只是把"落点"从"选中片段 / 播放头"换成"鼠标下的片段"，所以这里把鼠标下的
+   * 片段 id 当成"选中片段"传进去 —— 文字/音频片段该拒绝还是拒绝，一行规则都不用重写。
+   *
+   * 落点必须落在**片段上**：空白处返回 null（不画预览、不落库）。
+   */
+  function planForEffectDrop(presetId: string, track: Track, frame: Frame): EffectDropPlan | null {
+    const preset = effectPresetById(presetId);
+    if (preset === null) return null;
+    const clip = clipAtFrame(track, frame);
+    if (clip === null) return null;
+    const resolved = resolveEffectTarget(store.getDoc(), clip.id, frame);
+    if ('message' in resolved) return { clipId: clip.id, message: resolved.message };
+    return { clipId: clip.id, ops: buildEffectOps(resolved.clip, preset) };
+  }
+
   function onDragOver(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasEffectDrag(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      const presetId = getDraggingEffectId();
+      const target = dropTargetAt(event);
+      if (presetId === null || target === null) {
+        store.setEffectGhost(null);
+        return;
+      }
+      const plan = planForEffectDrop(presetId, target.track, target.frame);
+      // 空白处既不画预览也不落库（与素材/转场拖到空白一致）
+      if (plan === null) {
+        store.setEffectGhost(null);
+        return;
+      }
+      store.setEffectGhost(
+        'message' in plan
+          ? { clipId: plan.clipId, valid: false, reason: plan.message }
+          : { clipId: plan.clipId, valid: true },
+      );
+      return;
+    }
     if (hasTransitionDrag(event.dataTransfer)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
@@ -692,7 +746,14 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onDragLeave(event: React.DragEvent<HTMLCanvasElement>): void {
-    if (!hasAssetDrag(event.dataTransfer) && !hasTextDrag(event.dataTransfer) && !hasTransitionDrag(event.dataTransfer)) return;
+    if (
+      !hasAssetDrag(event.dataTransfer) &&
+      !hasTextDrag(event.dataTransfer) &&
+      !hasTransitionDrag(event.dataTransfer) &&
+      !hasEffectDrag(event.dataTransfer)
+    ) {
+      return;
+    }
     // 只有真的离开画布才清：在画布内部换轨道时 dragleave 也会触发
     const canvas = canvasRef.current;
     if (canvas !== null) {
@@ -702,9 +763,31 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     }
     store.setDropGhost(null);
     store.setTransitionGhost(null);
+    store.setEffectGhost(null);
   }
 
   function onDrop(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasEffectDrag(event.dataTransfer)) {
+      event.preventDefault();
+      const presetId = readEffectDrag(event.dataTransfer) ?? getDraggingEffectId();
+      clearDraggingEffect();
+      store.setEffectGhost(null);
+      if (presetId === null) return;
+      const target = dropTargetAt(event);
+      if (target === null) return;
+      const plan = planForEffectDrop(presetId, target.track, target.frame);
+      if (plan === null) return;
+      if ('message' in plan) {
+        store.pushError(makeError('E_INVALID_PROJECT', plan.message));
+        return;
+      }
+      // 空数组 = 这个片段已经套着同一个预设，不发无用撤销步
+      if (plan.ops.length === 0) return;
+      store.dispatch(plan.ops, `拖入特效（${effectPresetById(presetId)?.name ?? '特效'}）`);
+      // 选中落点片段：否则面板的「已应用」高亮会跟着播放头跑到别的片段上
+      store.setSelectedClipId(plan.clipId);
+      return;
+    }
     if (hasTransitionDrag(event.dataTransfer)) {
       event.preventDefault();
       const payload = readTransitionDrag(event.dataTransfer) ?? getDraggingTransition();

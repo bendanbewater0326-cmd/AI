@@ -92,6 +92,51 @@ const channelSpread = (stats) => {
   const values = [stats.meanR, stats.meanG, stats.meanB];
   return Math.max(...values) - Math.min(...values);
 };
+const tracks = async () => JSON.parse(await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.tracks())'));
+/** 帧号 + 轨道 → 画布上的屏幕坐标（时间线内容区，行中线）。 */
+const dragPoint = async (frame, trackId) =>
+  JSON.parse(
+    await page.session.evaluate(`(() => {
+      const canvas = document.querySelector('[data-v="timeline-canvas"]');
+      const layout = window.__VEDITOR_TEST__.timelineLayout();
+      const row = layout.rows.find((item) => item.trackId === ${JSON.stringify(trackId)});
+      if (!row) return JSON.stringify({ x: -1, y: -1 });
+      const zoom = window.__VEDITOR_TEST__.zoomLevel();
+      const scrollX = Number(canvas.dataset['scrollX'] ?? '0');
+      const rect = canvas.getBoundingClientRect();
+      return JSON.stringify({
+        x: rect.left + layout.headerWidth + ${frame} * zoom - scrollX,
+        y: rect.top + row.top + row.height / 2,
+      });
+    })()`),
+  );
+/**
+ * 完整模拟一次拖拽：卡片 `dragstart` → 画布 `dragover` → 画布 `drop`。
+ *
+ * **必须补 dragstart**：dragover 阶段浏览器不允许读 `getData()`，实现里靠 `ui/dnd`
+ * 的页面内变量传 id —— 那个变量只有真正的 dragstart 才会写上。
+ */
+const dragPreset = async (point, presetId) =>
+  JSON.parse(
+    await page.session.evaluate(`(() => {
+      const canvas = document.querySelector('[data-v="timeline-canvas"]');
+      const card = document.querySelector('[data-v="effect-preset"][data-preset-id="${presetId}"]');
+      const dt = new DataTransfer();
+      const make = (type, target) => {
+        const event = new DragEvent(type, {
+          bubbles: true, cancelable: true, dataTransfer: dt,
+          clientX: ${point.x}, clientY: ${point.y},
+        });
+        target.dispatchEvent(event);
+        return event;
+      };
+      if (card) make('dragstart', card);
+      const over = make('dragover', canvas);
+      const ghost = window.__VEDITOR_TEST__.effectGhost();
+      make('drop', canvas);
+      return JSON.stringify({ prevented: over.defaultPrevented, ghost });
+    })()`),
+  );
 /** 面板上可见的卡片（按 DOM 顺序）。 */
 const cards = async () =>
   JSON.parse(
@@ -334,6 +379,81 @@ try {
     })()`),
   );
   report.check('⑬ 每张卡的缩略图都有内容（不是空白 canvas）', fallbackOk === true);
+
+  // ---- ⑭ 拖拽：落在片段上 → 绿色预览 + 落库 + 自动选中 ----
+  /**
+   * 拖拽的落点**按鼠标下的片段**，不看选中态 —— 这里故意先选中文字片段
+   * （它压在视频上面），再拖到视频片段那一行，验证特效落在视频上。
+   */
+  const videoClip = (await clips()).find((item) => item.text === null || item.text === undefined);
+  const textTrackId = textClip?.trackId ?? '';
+  await page.session.evaluate(`window.__VEDITOR_TEST__.selectClip(${JSON.stringify(textClip.id)})`);
+  await sleep(250);
+  const beforeDrag = JSON.stringify(await clipById(videoClip.id));
+  const dropOnVideo = await dragPreset(await dragPoint(20, videoClip.trackId), 'fx-retro');
+  await sleep(600);
+  const afterDrag = await clipById(videoClip.id);
+  const selectionAfter = await page.session.evaluate('window.__VEDITOR_TEST__.selection()');
+  report.check(
+    `⑭ 拖到视频片段 → 绿色预览（valid=${dropOnVideo.ghost?.valid}，指向 ${
+      dropOnVideo.ghost?.clipId === videoClip.id ? '视频片段' : dropOnVideo.ghost?.clipId
+    }），松手后落到视频上（temperature=${gradeOf(afterDrag)?.params?.temperature}）`,
+    dropOnVideo.prevented === true &&
+      dropOnVideo.ghost?.valid === true &&
+      dropOnVideo.ghost?.clipId === videoClip.id &&
+      gradeOf(afterDrag)?.params?.temperature === 18 &&
+      beforeDrag !== JSON.stringify(afterDrag),
+  );
+  report.check(
+    `⑭b 松手后自动选中落点片段（${selectionAfter === videoClip.id ? '视频片段' : selectionAfter}），文字片段没被改动`,
+    selectionAfter === videoClip.id && (await clipById(textClip.id))?.effectDetails?.length === 0,
+  );
+
+  // ---- ⑮ 拖到文字片段 → 红色预览 + 可读原因 + 文档不变 ----
+  const beforeTextDrop = JSON.stringify(await clipById(textClip.id));
+  const dropOnText = await dragPreset(await dragPoint(20, textTrackId), 'fx-vivid');
+  await sleep(400);
+  report.check(
+    `⑮ 拖到文字片段 → 红色预览（valid=${dropOnText.ghost?.valid}，原因「${
+      dropOnText.ghost?.reason ?? '（无）'
+    }」）且文档未变`,
+    dropOnText.ghost?.valid === false &&
+      (dropOnText.ghost?.reason ?? '').includes('文字片段') &&
+      JSON.stringify(await clipById(textClip.id)) === beforeTextDrop,
+  );
+
+  // ---- ⑯ 拖到没有片段的轨道 → 不画预览、不落库、不报错 ----
+  await page.session.evaluate('window.__VEDITOR_TEST__.dismissAllErrors?.()');
+  const audioTrackId = (await tracks()).find((track) => track.kind === 'audio')?.id ?? 'trk_A1';
+  const dropOnEmpty = await dragPreset(await dragPoint(20, audioTrackId), 'fx-vivid');
+  await sleep(400);
+  const emptyErrors = await errors();
+  report.check(
+    `⑯ 拖到空轨道 → 不画预览（ghost=${dropOnEmpty.ghost === null ? 'null' : '有'}）、不报错（${
+      emptyErrors.length
+    } 条）`,
+    dropOnEmpty.ghost === null && emptyErrors.length === 0 && gradeOf(await clipById(videoClip.id))?.params?.temperature === 18,
+  );
+
+  // ---- ⑰ 重复拖同一个预设 → 不占撤销步 ----
+  /**
+   * 此刻视频片段上已经套着「复古胶片」。再拖一次同一个预设应该**什么都不发**，
+   * 所以撤销一次必须回到**上一个状态**（冷调，⑪ 点的那次），而不是"看起来没变化"。
+   */
+  const beforeRepeat = JSON.stringify(await clipById(videoClip.id));
+  await dragPreset(await dragPoint(20, videoClip.trackId), 'fx-retro');
+  await sleep(400);
+  const afterRepeat = JSON.stringify(await clipById(videoClip.id));
+  await page.session.evaluate('window.__VEDITOR_TEST__.undo()');
+  await sleep(450);
+  const afterUndo = await clipById(videoClip.id);
+  report.check(
+    `⑰ 重复拖同一预设不占撤销步（文档未变=${beforeRepeat === afterRepeat}，撤销一次后 temperature=${
+      gradeOf(afterUndo)?.params?.temperature
+    }）`,
+    beforeRepeat === afterRepeat && gradeOf(afterUndo)?.params?.temperature === -34,
+  );
+
 } finally {
   await page.close();
   server.close();

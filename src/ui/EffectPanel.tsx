@@ -39,6 +39,7 @@ import { appliedPresetId, buildEffectOps, currentGrade, resolveEffectTarget } fr
 import { store, useDoc, useSelection } from '../core/store';
 import { applyGradeToPixels } from '../render/grade';
 import { getThumbnail } from '../persist/autosave';
+import { clearDraggingEffect, setEffectDrag } from './dnd';
 
 /** 缩略图分辨率（16:9）。14 张卡 × 96×54 一共 7 万像素，逐像素调色毫无压力。 */
 const THUMB_W = 96;
@@ -258,9 +259,13 @@ export function EffectPanel(): ReactElement {
               data-applied={applied}
               data-pinned={isOriginalPreset(preset)}
               aria-pressed={applied}
-              aria-label={`${preset.name}（点击应用）`}
-              title={preset.hint}
+              aria-label={`${preset.name}（点击应用，或拖到片段上）`}
+              title={`${preset.hint}｜也可以拖到时间线的片段上`}
               onClick={() => applyPreset(preset)}
+              /* 拖到时间线：第四个独立 MIME，落点是「鼠标下那一整块片段」 */
+              draggable
+              onDragStart={(event) => setEffectDrag(event.dataTransfer, preset.id)}
+              onDragEnd={clearDraggingEffect}
             >
               <span className="v-fxcard__stage">
                 <Thumb source={source} preset={preset} />
@@ -278,7 +283,7 @@ export function EffectPanel(): ReactElement {
       </div>
 
       <p className="v-effectpanel__hint" data-v="effect-hint">
-        选中片段后点击应用（再点另一个会替换，不会叠加）
+        选中片段后点击应用，或拖到片段上（再点另一个会替换，不会叠加）
       </p>
     </div>
   );

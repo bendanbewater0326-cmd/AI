@@ -236,12 +236,27 @@ try {
   );
 
   // ---- ⑤ 重链不该进撤销栈 ----
-  const undoLabel = await page.session.evaluate(
-    `(() => { const entry = window.__VEDITOR_TEST__.lastUndoLabel?.(); return entry ?? ''; })()`,
+  /**
+   * **必须前后各读一次**。
+   *
+   * 之前的写法是"断言最近一步不是重新链接"——那是**恒真**的：栈顶可能是几步之前的操作，
+   * 而且当时用的 `lastUndoLabel?.()` 里那个钩子根本不存在（可选调用把"没有这个接口"吞掉了），
+   * 读到的永远是空串，断言从头到尾没验过任何东西。
+   *
+   * 现在做一次完整的"离线 → 重链"，断言栈顶标签**一模一样**：
+   * 重链真的没往撤销栈里塞东西，这一步才会绿。
+   */
+  const labelBefore = await page.session.evaluate('window.__VEDITOR_TEST__.lastUndoLabel()');
+  await page.session.evaluate(`window.__VEDITOR_TEST__.setAssetStatus('${asset.id}', 'offline')`);
+  await sleep(400);
+  await page.session.evaluate(
+    `window.__VEDITOR_TEST__.relinkAssetFromUrl('${asset.id}', ${JSON.stringify(`${origin}/${FIXTURE}`)})`,
   );
+  await sleep(1200);
+  const labelAfter = await page.session.evaluate('window.__VEDITOR_TEST__.lastUndoLabel()');
   report.check(
-    `⑤ 重链不进撤销栈（最近一步：${JSON.stringify(undoLabel)}）`,
-    !String(undoLabel).includes('重新链接'),
+    `⑤ 重链不进撤销栈（栈顶 ${JSON.stringify(labelBefore)} → ${JSON.stringify(labelAfter)}）`,
+    labelBefore === labelAfter,
   );
 
   // ---- ⑥ 向下兼容：旧工程没有 contentHash/sourcePath 也能重链 ----

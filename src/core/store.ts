@@ -21,6 +21,7 @@ import type {
   ClipOperation,
   DragDraft,
   DropGhost,
+  EffectGhost,
   TrackDrag,
   TransitionGhost,
   EphemeralState,
@@ -136,12 +137,22 @@ export interface ProjectStore {
   redo(): UndoResult | null;
   canUndo(): boolean;
   canRedo(): boolean;
+  /**
+   * 撤销栈顶那一步的标签（null = 栈空）。**只读，不移动栈**。
+   *
+   * 用来断言"某个操作**没有**进撤销栈"（比如重新链接素材）：
+   * 只比较操作前后的栈顶标签是否一致，才能证明这一步真的什么都没记。
+   * 没有这个接口时，测试只能断言"最近一步不叫 X" —— 那是恒真的（栈顶可能是几步之前的）。
+   */
+  peekUndoLabel(): string | null;
   subscribe(listener: () => void): () => void;
   setSnapEnabled(enabled: boolean): void;
   /** 拖入落点预览（null = 清掉）。**只在值真的变了才通知**，否则拖拽时每秒几十次重绘。 */
   setDropGhost(ghost: DropGhost | null): void;
   /** 拖转场时的落点预览（null = 清掉）。与 `setDropGhost` 同一套"值不变不通知"。 */
   setTransitionGhost(ghost: TransitionGhost | null): void;
+  /** 拖画面特效时的落点预览（null = 没在拖特效）。 */
+  setEffectGhost(ghost: EffectGhost | null): void;
   /** 轨道排序拖拽预览（null = 没在拖）。同样只在值变了才通知。 */
   setTrackDrag(drag: TrackDrag | null): void;
   /**
@@ -345,6 +356,7 @@ const EMPTY_EPHEMERAL: EphemeralState = {
   snapEnabled: true,
   dropGhost: null,
   transitionGhost: null,
+  effectGhost: null,
   trackDrag: null,
 };
 
@@ -577,6 +589,11 @@ export function createStore(initialDoc?: Project): ProjectStore {
       return future.length > 0;
     },
 
+    peekUndoLabel(): string | null {
+      const entry = past[past.length - 1];
+      return entry === undefined ? null : entry.label;
+    },
+
     undo(): UndoResult | null {
       const entry = past.pop();
       if (!entry) return null;
@@ -640,6 +657,22 @@ export function createStore(initialDoc?: Project): ProjectStore {
         return;
       }
       ephemeral = { ...ephemeral, transitionGhost: ghost };
+      notify();
+    },
+
+    setEffectGhost(ghost: EffectGhost | null): void {
+      const previous = ephemeral.effectGhost;
+      if (previous === ghost) return;
+      if (
+        previous !== null &&
+        ghost !== null &&
+        previous.clipId === ghost.clipId &&
+        previous.valid === ghost.valid
+      ) {
+        // 落点没变：只更新 reason（避免每帧都 notify）
+        return;
+      }
+      ephemeral = { ...ephemeral, effectGhost: ghost };
       notify();
     },
 

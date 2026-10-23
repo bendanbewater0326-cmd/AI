@@ -90,6 +90,8 @@ export interface TimelineColors {
   snap: string;
   ghost: string;
   ghostInvalid: string;
+  /** 拖特效时的整块描边（绿）：片段选中态是蓝色描边，两者必须能分开 */
+  ghostEffect: string;
   overlayMark: string;
   emptyText: string;
   headerText: string;
@@ -124,6 +126,7 @@ export const DEFAULT_TIMELINE_COLORS: TimelineColors = {
   snap: '#2f9e6e',
   ghost: '#1677ff',
   ghostInvalid: '#c0392b',
+  ghostEffect: '#2f9e6e',
   overlayMark: '#d64545',
   emptyText: '#8a8a8a',
   headerText: '#6a6a6a',
@@ -362,6 +365,12 @@ export function paintTimeline(ctx: CanvasRenderingContext2D, state: TimelinePain
     const transitionGhost = ephemeral.transitionGhost ?? null;
     if (transitionGhost !== null) {
       drawTransitionGhost(ctx, transitionGhost, state, colors);
+    }
+
+    // 拖特效时的落点预览（整块片段描边 + 淡色蒙层）
+    const effectGhost = ephemeral.effectGhost ?? null;
+    if (effectGhost !== null) {
+      drawEffectGhost(ctx, effectGhost, state, colors);
     }
 
     /**
@@ -1012,6 +1021,50 @@ function drawDropGhost(
  * 为什么不用 `drawDropGhost` 那种"整块半透明矩形"：转场没有自己的时间跨度，
  * 它表达的是"这条接缝上有一个转场"。画成矩形会让人以为要在那里插一段内容。
  */
+/**
+ * 拖画面特效时的落点预览：**整块片段**的描边 + 淡色蒙层。
+ *
+ * 为什么形状和前两种 ghost 都不一样：
+ * - 素材/文字的 ghost 是"在轨道上放一块新内容"，所以画一个从某帧开始的方块；
+ * - 转场 ghost 是"贴在接缝上的楔形"（有侧别、有跨度）；
+ * - 特效挂在**整块片段**上，没有起点也没有时长 —— 只能整块描边，
+ *   否则用户会以为"是不是从这一帧开始生效"。
+ *
+ * 颜色用**绿**（`ghostEffect`）而不是其他 ghost 的蓝：片段的选中态本身就是蓝色描边，
+ * 蓝色 ghost 会让人分不清"这块是选中了"还是"这块能落"。红（`ghostInvalid`）沿用。
+ */
+function drawEffectGhost(
+  ctx: CanvasRenderingContext2D,
+  ghost: NonNullable<EphemeralState['effectGhost']>,
+  state: TimelinePaintState,
+  colors: TimelineColors,
+): void {
+  const { doc } = state;
+  const layout = trackLayout(doc);
+  const row = rowOfClip(doc, layout, ghost.clipId);
+  if (row === null) return;
+  const track = doc.tracks.find((item) => item.id === row.trackId);
+  const clip = track?.clips.find((item) => item.id === ghost.clipId);
+  if (clip === undefined) return;
+
+  const box = clipBox(clip, row, doc.zoomLevel, state.scrollX);
+  if (box.x + box.width < 0 || box.x > state.viewport.width) return;
+  const color = ghost.valid ? colors.ghostEffect : colors.ghostInvalid;
+
+  ctx.save();
+  // 蒙层：0.22 足够说明"整块都会变"，又不会把缩略图盖住（用户还要看颜色）
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = color;
+  ctx.fillRect(box.x, box.y + 1, box.width, box.height - 2);
+
+  // 描边：2px，比选中态的 1px 蓝粗一档
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(box.x + 1, box.y + 1, Math.max(1, box.width - 2), Math.max(1, box.height - 2));
+  ctx.restore();
+}
+
 function drawTransitionGhost(
   ctx: CanvasRenderingContext2D,
   ghost: NonNullable<EphemeralState['transitionGhost']>,

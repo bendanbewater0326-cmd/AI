@@ -166,3 +166,51 @@ export function readTransitionDrag(dataTransfer: DataTransfer | null): Transitio
   const prefix = 'veditor-transition:';
   return fallback.startsWith(prefix) ? parseTransition(fallback.slice(prefix.length)) : null;
 }
+
+/* ================= 画面特效（左栏「特效」→ 时间线的片段上） ================= */
+
+/**
+ * 特效的 MIME。
+ *
+ * 第四种独立 MIME 了，理由是落点语义又不一样：
+ * 素材是"按目标轨 + 占用避让"，文字是"永远落文字轨"，转场是"贴在片段某一侧"，
+ * 而特效是**整块片段**（没有时间跨度、没有侧别）。共用一个 MIME 会让 onDrop 长出一堆 if。
+ */
+export const EFFECT_MIME = 'application/x-veditor-effect';
+
+/** 正在拖的特效预设 id（dragover 阶段读不到 getData，只能靠模块变量）。 */
+let draggingEffectId: string | null = null;
+
+export function getDraggingEffectId(): string | null {
+  return draggingEffectId;
+}
+
+export function clearDraggingEffect(): void {
+  draggingEffectId = null;
+}
+
+/** 拖起一张特效卡。 */
+export function setEffectDrag(dataTransfer: DataTransfer | null, presetId: string): void {
+  draggingEffectId = presetId;
+  if (dataTransfer === null) return;
+  dataTransfer.setData(EFFECT_MIME, presetId);
+  // 同前三种：某些 WebView2 版本在 `types` 里不认纯自定义 MIME，补一个带前缀的 text/plain 兜底
+  dataTransfer.setData('text/plain', `veditor-effect:${presetId}`);
+  dataTransfer.effectAllowed = 'copy';
+}
+
+/** 这次拖拽是不是特效卡（dragover 阶段只能用 types 判断）。 */
+export function hasEffectDrag(dataTransfer: DataTransfer | null): boolean {
+  if (dataTransfer === null) return false;
+  return Array.from(dataTransfer.types).includes(EFFECT_MIME);
+}
+
+/** 读出被拖的特效预设 id（drop 阶段）。 */
+export function readEffectDrag(dataTransfer: DataTransfer | null): string | null {
+  if (dataTransfer === null) return null;
+  const direct = dataTransfer.getData(EFFECT_MIME);
+  if (direct !== '') return direct;
+  const fallback = dataTransfer.getData('text/plain');
+  const prefix = 'veditor-effect:';
+  return fallback.startsWith(prefix) ? fallback.slice(prefix.length) : null;
+}

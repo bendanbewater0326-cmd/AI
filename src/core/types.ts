@@ -519,6 +519,8 @@ export interface EphemeralState {
   dropGhost: DropGhost | null;
   /** 拖转场时的落点预览（null = 没在拖转场）。 */
   transitionGhost: TransitionGhost | null;
+  /** 拖画面特效时的落点预览（null = 没在拖特效）。 */
+  effectGhost: EffectGhost | null;
   /**
    * 正在拖动轨道头排序（只画指示线，松手才提交）。
    *
@@ -560,6 +562,21 @@ export interface TransitionGhost {
   side: 'in' | 'out';
   /** 画出来的跨度（叠化取 D/2、淡出取 D），只用于视觉反馈 */
   durationFrames: Frame;
+  valid: boolean;
+  /** 不可落时的可读原因（painter 不画，松手时报给用户） */
+  reason?: string;
+}
+
+/**
+ * 拖**画面特效**时的落点预览。
+ *
+ * 与前两种 ghost 都不同：特效**没有时间跨度、也没有侧别** —— 它挂在整块片段上。
+ * 所以这里只需要"哪一段"，painter 画的是整块片段的描边（绿=能加、红=不能加）。
+ *
+ * 共用一个结构会逼着 painter 去猜 `durationFrames === 0` / `side` 为空是什么意思。
+ */
+export interface EffectGhost {
+  clipId: string;
   valid: boolean;
   /** 不可落时的可读原因（painter 不画，松手时报给用户） */
   reason?: string;

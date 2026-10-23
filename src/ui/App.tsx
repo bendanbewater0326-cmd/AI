@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import type { Asset, DropGhost, Project, TrackDrag, TransitionGhost } from '../core/types';
+import type { Asset, DropGhost, EffectGhost, Project, TrackDrag, TransitionGhost } from '../core/types';
 import { installKeymap } from '../core/keymap';
 import { store, useDoc, useErrors, useFrame, useSelection } from '../core/store';
 import { trackLayout } from '../core/trackLayout';
@@ -156,6 +156,13 @@ interface VeditorTestHooks {
   /** 只读快照：当前错误条（T12 显式拒绝验收用）。 */
   errors: () => Array<{ code: string; message: string }>;
   /**
+   * 清空错误条（E2E 用）。
+   *
+   * 断言"这一次操作有没有报错"之前必须先把之前的清掉 —— 否则读到的
+   * `errors()[0]` 是几步之前留下的那条，测试会在"该报错时通过、不该报错时也通过"。
+   */
+  dismissAllErrors: () => void;
+  /**
    * 测试用：给当前通道装一个"转写"能力（等价于宿主注入 `transcribe`）。
    *
    * 为什么要开这个口子：语音识别（R-059）的真实链路是"抽音频 → 宿主转写 → 落字幕"，
@@ -175,6 +182,8 @@ interface VeditorTestHooks {
   dropGhost: () => DropGhost | null;
   /** 拖转场时的落点预览（null = 没在拖转场）。 */
   transitionGhost: () => TransitionGhost | null;
+  /** 拖画面特效时的落点预览（null = 没在拖特效）。 */
+  effectGhost: () => EffectGhost | null;
   /** 轨道排序拖拽预览（null = 没在拖）。 */
   trackDrag: () => TrackDrag | null;
   /**
@@ -276,6 +285,8 @@ interface VeditorTestHooks {
   overlayMarks: () => number[];
   /** 是否还有可撤销的操作（M4：一次 AI 操作 = 1 步）。 */
   canUndo: () => boolean;
+  /** 撤销栈顶的标签（null = 栈空）。断言"某操作没进撤销栈"时必须前后各读一次。 */
+  lastUndoLabel: () => string | null;
   undo: () => void;
   /** 入点/出点（C2：R-040）。 */
   marks: () => { in: number | null; out: number | null };
@@ -1127,6 +1138,7 @@ export function App(): ReactElement {
         })),
       errors: () =>
         store.getEphemeral().errors.map((error) => ({ code: error.code, message: error.message })),
+      dismissAllErrors: () => store.clearErrors(),
       installTranscriber: (transcribe: AIProvider['transcribe']) => {
         setAIProvider({ ...getAIProvider(), transcribe });
       },
@@ -1136,6 +1148,7 @@ export function App(): ReactElement {
       // 拖拽落点预览（E2E 断言"看到的就是落到的"）
       dropGhost: () => store.getEphemeral().dropGhost,
       transitionGhost: () => store.getEphemeral().transitionGhost,
+      effectGhost: () => store.getEphemeral().effectGhost,
       /** 轨道排序拖拽预览（null = 没在拖）。 */
       trackDrag: () => store.getEphemeral().trackDrag,
       /**
@@ -1315,6 +1328,7 @@ export function App(): ReactElement {
       },
       overlayMarks: () => store.getEphemeral().overlayMarks.map((mark) => mark.frame),
       canUndo: () => store.canUndo(),
+      lastUndoLabel: () => store.peekUndoLabel(),
       /** 撤销一步（S3 的"拖动只占一个撤销步"要靠它验证）。 */
       undo: () => store.undo(),
       marks: () => ({ in: store.getEphemeral().markIn, out: store.getEphemeral().markOut }),
