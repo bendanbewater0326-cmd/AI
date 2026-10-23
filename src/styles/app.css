@@ -3318,3 +3318,197 @@ body.v-track-dragging .v-track-head {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- 字幕视图切换（C4） ---------- */
+
+/*
+ * 放在状态栏右侧，**不新增一行**：左栏高度只够 8 条列表（E2E ⑤b 卡这个数），
+ * 多一行 22px 就掉到 7 条。按钮压在状态栏原有的 18px 里，总高不变。
+ */
+.v-caption-viewswitch {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  gap: 1px;
+  padding: 1px;
+  border-radius: 3px;
+  background: var(--v-surface-2);
+}
+
+.v-caption-viewbtn {
+  height: 16px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--v-fg-dim);
+  font-size: 10px;
+  line-height: 16px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.v-caption-viewbtn:hover {
+  color: var(--v-fg);
+}
+
+/* 当前视图：白底 + 蓝字（与左栏 Tab 的激活态同一套语言） */
+.v-caption-viewbtn[data-active='true'] {
+  background: var(--v-bg);
+  color: var(--v-accent);
+  box-shadow: 0 0 0 0.5px var(--v-border);
+}
+
+.v-caption-viewbtn:focus-visible {
+  outline: var(--v-focus-ring) solid var(--v-accent);
+  outline-offset: 1px;
+}
+
+/* ---------- 字幕迷你时间轴（C4） ---------- */
+
+.v-caption-tl {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 8px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* 条块容器：横向铺满，条块按百分比绝对定位 */
+.v-caption-tl__track {
+  position: relative;
+  flex: 0 0 auto;
+  height: 32px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface-2);
+  overflow: hidden;
+}
+
+.v-caption-tl__block {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  min-width: 2px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  border: 0.5px solid color-mix(in srgb, var(--v-accent) 35%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--v-accent) 16%, var(--v-surface-2));
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.v-caption-tl__block:hover {
+  background: color-mix(in srgb, var(--v-accent) 22%, var(--v-surface-2));
+}
+
+/* 选中：与列表同一个 selection，蓝底加深 + 描边（不抢播放高亮的层级） */
+.v-caption-tl__block[data-selected='true'] {
+  border-color: var(--v-accent);
+  background: color-mix(in srgb, var(--v-accent) 28%, var(--v-surface-2));
+  z-index: 2;
+}
+
+/* 播放中所在的条块：再深一档（可同时是选中态） */
+.v-caption-tl__block[data-active='true'] {
+  background: color-mix(in srgb, var(--v-accent) 40%, var(--v-surface-2));
+  z-index: 3;
+}
+
+.v-caption-tl__block[data-active='true'][data-selected='true'] {
+  box-shadow: inset 0 0 0 1px var(--v-accent);
+}
+
+.v-caption-tl__block[data-dragging='true'] {
+  z-index: 4;
+  opacity: 0.9;
+}
+
+.v-caption-tl__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--v-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 文本不接指针：按下要落在条块/把手上，别让 span 抢走 pointerdown */
+  pointer-events: none;
+}
+
+/* 两端把手：各 6px，视觉上只有一道细线，避免在 32px 条块里太笨重 */
+.v-caption-tl__handle {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  /*
+   * **宽度必须按比例收缩到 30%**，不能写死 6px。
+   *
+   * 字幕条多且每条很短时，块宽会小于 12px（实测 24 条 1.8s 字幕 → 每块 11.7px）。
+   * 写死 6px 的话两个把手正好铺满整块，`elementFromPoint(块中心)` 命中的是把手，
+   * 块正体的点击被 `stopPropagation()` 吞掉 —— 用户点条块完全没反应（选中和跳转都失效）。
+   * 用 `min(6px, 30%)`：宽块时仍是 6px（好拖），窄块时自动缩到 3.5px 左右，
+   * 中间留出可点区域。
+   *
+   * 注意：这只改把手宽度，**不影响条块本身的宽度比例**（比例断言仍然成立）。
+   */
+  width: min(6px, 30%);
+  background: transparent;
+  cursor: col-resize;
+  /* 触摸拖动时不要触发页面滚动 */
+  touch-action: none;
+}
+
+.v-caption-tl__handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 12px;
+  margin: -6px 0 0 -1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--v-accent) 45%, transparent);
+}
+
+.v-caption-tl__handle:hover {
+  background: color-mix(in srgb, var(--v-accent) 20%, transparent);
+}
+
+.v-caption-tl__block[data-selected='true'] .v-caption-tl__handle::after,
+.v-caption-tl__handle:hover::after {
+  background: var(--v-accent);
+}
+
+/* 时间刻度：起点 / 最晚结束帧 */
+.v-caption-tl__axis {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  line-height: 1.2;
+  color: var(--v-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.v-caption-tl__hint {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--v-fg-dim);
+}
+
+/* 拖动中：全局 col-resize 光标 + 禁止选中文本（拖过文本时不会刷成一片蓝） */
+body.v-caption-tl-dragging {
+  cursor: col-resize;
+}
+
+body.v-caption-tl-dragging * {
+  user-select: none;
+}

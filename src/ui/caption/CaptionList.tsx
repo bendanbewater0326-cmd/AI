@@ -41,10 +41,18 @@ export interface CaptionListProps {
   selectedIds: readonly string[];
   /** 点击一条：跳播放头 + 选中。 */
   onPick: (row: CaptionRow) => void;
+  /**
+   * 需要滚进可视区的那一条（null = 不滚）。
+   *
+   * 时间轴视图里点了某条 → 切回列表时应该停在它上面，而不是回到列表顶部
+   * （列表可能几十条，用户还得自己再找一遍）。用 `block: 'nearest'`：
+   * 已经在视野里就**不动**，避免"点一下整列表跳一下"。
+   */
+  focusId?: string | null;
 }
 
 export function CaptionList(props: CaptionListProps): ReactElement {
-  const { rows, selectedIds, onPick } = props;
+  const { rows, selectedIds, onPick, focusId = null } = props;
 
   /** 正在编辑的片段 id（null = 没有在编辑）。 */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,6 +60,26 @@ export function CaptionList(props: CaptionListProps): ReactElement {
   /** 播放头所在的字幕（播放联动高亮）。 */
   const [activeId, setActiveId] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // 外部选中的那条滚进可视区（时间轴点选后切回列表；隐藏 Tab 里没有布局，自动跳过）
+  useEffect(() => {
+    if (focusId === null) return;
+    const list = listRef.current;
+    if (list === null) return;
+    const target = Array.from(list.querySelectorAll<HTMLElement>('[data-v="caption-row"]')).find(
+      (node) => node.getAttribute('data-clip-id') === focusId,
+    );
+    if (target === undefined) return;
+    /*
+     * 用 `center` 而不是 `nearest`。
+     *
+     * `nearest` 的语义是"已可见就不动"，但列表可视高度会变（状态栏的 notice 出现/消失
+     * 差一行），元素"部分可见"时它不滚 —— 实测切回列表后选中行距顶 300px、列表才 280px 高，
+     * 行被裁掉一截。`center` 把行放到正中，不受高度变化影响，视觉上也比贴边更醒目。
+     */
+    target.scrollIntoView({ block: 'center' });
+  }, [focusId, rows.length]);
 
   // 编辑态自动聚焦 + 光标移到末尾
   useEffect(() => {
@@ -97,7 +125,7 @@ export function CaptionList(props: CaptionListProps): ReactElement {
   );
 
   return (
-    <div className="v-caption-list" data-v="caption-list">
+    <div className="v-caption-list" data-v="caption-list" ref={listRef}>
       {rows.map((row) => {
         const selected = selectedIds.includes(row.clipId);
         const active = activeId === row.clipId;

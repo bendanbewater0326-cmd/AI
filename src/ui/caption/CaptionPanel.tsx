@@ -32,6 +32,21 @@
  *
  * 播放头真正的推进在 `transport`（App 里），`store.setPlayheadFrame` 只改 doc 字段、
  * 不驱动渲染。所以和 `TimelineView` 一样：由 App 注入 `onSeek(frame)`。
+ *
+ * ## 两种视图（C4）
+ *
+ * 同一条字幕轨，两种读法：
+ *
+ * | 视图 | 回答什么问题 |
+ * |---|---|
+ * | 列表（默认） | 每条字幕写了什么、怎么改字 |
+ * | 时间轴 | 字幕怎么分布在时间上、这条要拖长还是拖短 |
+ *
+ * 两个视图**共用同一份 selection**（`store` 里那一个），所以"在时间轴点一条、
+ * 切回列表它也是选中态"——不需要同步两份状态。
+ *
+ * 切换按钮放在**状态栏右侧**而不是新起一行：左栏高度只够 8 条列表
+ * （E2E ⑤b 卡着这个数），多一行 22px 就会掉到 7 条。
  */
 import { useRef, useState } from 'react';
 import type { ReactElement } from 'react';
@@ -40,7 +55,38 @@ import { listCaptions } from '../../core/captions';
 import type { CaptionRow } from '../../core/captions';
 import type { Frame } from '../../core/types';
 import { CaptionList } from './CaptionList';
+import { CaptionTimeline } from './CaptionTimeline';
 import { exportSrt, generateCaptions, hasTranscribeChannel, importSrtFile } from './actions';
+
+/**
+ * 视图切换的持久化 key。
+ *
+ * 存在 `localStorage` 而不是 doc 里：这是**用户的工作习惯**，
+ * 不属于工程内容（不该跟着 .veditor 文件到处跑，也不该占一个撤销步）。
+ */
+const VIEW_STORAGE_KEY = 'veditor:caption:view';
+
+/** 两种视图：列表（逐条对文本）/ 迷你时间轴（按真实时长拖时长）。 */
+export type CaptionView = 'list' | 'timeline';
+
+/** 读上次选的视图；读不到 / 存储不可用都退回「列表」。 */
+function readStoredView(): CaptionView {
+  try {
+    return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'timeline' ? 'timeline' : 'list';
+  } catch {
+    // 隐私模式 / 禁用存储：退回默认视图，功能不受影响
+    return 'list';
+  }
+}
+
+/** 记住用户的选择（存不下就算了，只是下次进来回到默认）。 */
+function persistView(view: CaptionView): void {
+  try {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, view);
+  } catch {
+    // 忽略：存储配额 / 隐私模式
+  }
+}
 
 /** 行数组的相等判断：`useDoc` 用 `Object.is`，返回新数组会无限重渲染。 */
 function rowsEqual(left: CaptionRow[], right: CaptionRow[]): boolean {
@@ -73,9 +119,18 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 当前视图（默认「列表」，跨会话记住上次的选择）。 */
+  const [view, setView] = useState<CaptionView>(readStoredView);
 
   const selectedIds = selectedId === null ? [] : [selectedId];
   const transcribeReady = hasTranscribeChannel();
+
+  /** 切视图：先改本地（立即生效），再落盘（失败不影响本次切换）。 */
+  function changeView(next: CaptionView): void {
+    if (next === view) return;
+    setView(next);
+    persistView(next);
+  }
 
   /** 显示一行反馈，3.5 秒后自动消失（新的会顶掉旧的）。 */
   function flash(text: string): void {
@@ -220,8 +275,37 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
             {notice}
           </span>
         )}
+        {/* 视图切换：靠右，占的是状态栏本来就有的 18px，不新增一行 */}
+        <div className="v-caption-viewswitch" data-v="caption-viewswitch" role="group" aria-label="字幕视图">
+          <button
+            type="button"
+            className="v-caption-viewbtn"
+            data-v="caption-view-list"
+            data-active={view === 'list' ? 'true' : 'false'}
+            aria-pressed={view === 'list'}
+            title="逐条列表：看时间码、改文本"
+            onClick={() => changeView('list')}
+          >
+            列表
+          </button>
+          <button
+            type="button"
+            className="v-caption-viewbtn"
+            data-v="caption-view-timeline"
+            data-active={view === 'timeline' ? 'true' : 'false'}
+            aria-pressed={view === 'timeline'}
+            title="迷你时间轴：按真实时长摆放，拖把手调时长"
+            onClick={() => changeView('timeline')}
+          >
+            时间轴
+          </button>
+        </div>
       </div>
-      <CaptionList rows={rows} selectedIds={selectedIds} onPick={pick} />
+      {view === 'timeline' ? (
+        <CaptionTimeline rows={rows} selectedIds={selectedIds} onSeek={onSeek} />
+      ) : (
+        <CaptionList rows={rows} selectedIds={selectedIds} onPick={pick} focusId={selectedId} />
+      )}
       {fileInput}
     </div>
   );
