@@ -15,7 +15,11 @@ tests/fixtures/**/*.m4a
 tests/fixtures/**/*.mp3
 tests/fixtures/**/*.wav
 
-# 工具缓存（旧版 AI 会话目录；当前项目记忆在 .workbuddy-ai/memory/，那个要提交）
+# 工具缓存（旧 AI 会话目录）。
+# 注意：`.workbuddy-ai/memory/` **要进 git**（工作记忆留档），所以这里只排除 `.workbuddy/`。
+# 2026-10-23 合并说明：两份记忆已合并为同一内容，双写到两个目录 ——
+#   `.workbuddy/memory/`（会话系统提示读这里）与 `.workbuddy-ai/memory/`（进 git 的存档）。
+# 改记忆时**两个目录都要更新**，否则下次又会分叉（10-23 已因此误判过一次）。
 .workbuddy/
 
 # 临时补丁/调试脚本
