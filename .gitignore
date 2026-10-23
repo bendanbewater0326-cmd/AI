@@ -29,3 +29,6 @@ tmp_*
 # 系统垃圾
 .DS_Store
 Thumbs.db
+
+# 音效试听用 WAV 副本（AAC 专有编解码器在部分 Chromium webview 里解不开，仅供本机试听，可再生成）
+src/ui/audio/sfx/_preview.wav

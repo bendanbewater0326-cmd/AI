@@ -241,6 +241,14 @@ for (const sound of SOUNDS) {
   );
   runFFmpeg(args, '_preview.m4a');
   console.log(`\n  试听串烧 → src/ui/audio/sfx/_preview.m4a（${(statSync(path.join(OUT_DIR, '_preview.m4a')).size / 1024).toFixed(1)} KB）`);
+
+  // WAV 试听副本（不进 git，见 .gitignore）：AAC 是专有编解码器，开源 Chromium 系
+  // webview（部分客户端的文件预览）解不开 → 无声。WAV 是 PCM，任何内核都认。
+  runFFmpeg(
+    ['-i', path.join(OUT_DIR, '_preview.m4a'), '-c:a', 'pcm_s16le', path.join(OUT_DIR, '_preview.wav')],
+    '_preview.wav',
+  );
+  console.log(`  WAV 试听副本 → src/ui/audio/sfx/_preview.wav（${(statSync(path.join(OUT_DIR, '_preview.wav')).size / 1024 / 1024).toFixed(1)} MB，已 gitignore）`);
 }
 
 const files = readdirSync(OUT_DIR).filter((name) => name.endsWith('.m4a') && !name.startsWith('_'));

@@ -200,6 +200,14 @@
 
 ## 7. 风险与坑（动手前先记下）
 
+0. **AAC 解码依赖宿主内核**（2026-10-24 实测）：AAC 是专有编解码器，Edge / Chrome / WebView2
+   （本项目目标环境，E2E 用的就是 Edge）带解码器，但**开源 Chromium 系 webview 默认不带**
+   ——用户在 ZCode 客户端里点开 m4a 预览无声（系统播放器正常），就是这个原因。
+   影响：应用本身不受影响（目标内核都带 AAC 解码，全量 E2E 用 AAC 素材长期验证）；
+   试听请用系统播放器，或播 `src/ui/audio/sfx/_preview.wav`（WAV=PCM，任何内核都认，
+   已 gitignore、可由 `gen-sfx.mjs` 重新生成）。若未来宿主是"精简 Chromium 内核"，
+   上线前要用 `verify-secure-context` 同款探测补一个 AAC 解码能力自检（进 SelfCheck 候选）。
+
 1. **AAC 低码率听感**：48kbps 单声道对正弦/噪声合成音足够，但必须人工听；不行就提到 64k（体积预算还够）。
 2. **esbuild base64 的 data URL mime** 可能不是 `audio/mp4`——解码时**只取 base64 段**，File 显式给 type，不信任内联 mime；试听用 Blob URL 不用 data URL。
 3. **drop 里 ensure 是异步的**：importAssetFile 全链路（探测/写缓存）虽小仍要 await，drop handler 里做好 busy 提示（「正在添加音效…」），失败走 `store.pushError`，不静默。
