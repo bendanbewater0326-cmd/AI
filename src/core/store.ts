@@ -752,10 +752,21 @@ export function createStore(initialDoc?: Project): ProjectStore {
         notify();
         return;
       }
+      /**
+       * 主选为空时这次 toggle 会**成为主选**，此时**不能再压进 extra**。
+       *
+       * 原实现无条件 `[...extra, clipId]` + `selectedClipId ?? clipId`：
+       * 清空选择后连续 toggle 会得到 `[a, a, b, c...]` —— 同一片段既是主选又是次选，
+       * `getSelection()` 出现重复 id（多选计数比实际多 1；批量操作会重复处理同一条）。
+       * 触发路径：字幕面板的 Shift 范围选（先 `setSelectedClipId(null)` 再逐个 toggle）。
+       */
+      const becomesPrimary = ephemeral.selectedClipId === null;
       ephemeral = {
         ...ephemeral,
-        selectedClipId: ephemeral.selectedClipId ?? clipId,
-        extraSelectedClipIds: [...ephemeral.extraSelectedClipIds, clipId],
+        selectedClipId: becomesPrimary ? clipId : ephemeral.selectedClipId,
+        extraSelectedClipIds: becomesPrimary
+          ? ephemeral.extraSelectedClipIds
+          : [...ephemeral.extraSelectedClipIds, clipId],
       };
       notify();
     },

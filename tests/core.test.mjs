@@ -977,6 +977,42 @@ test('⑨c 删除"没被使用的素材"也能撤销（没有片段可带）', (
   eq(back.assets[0].id, asset.id);
 });
 
+/* ---------------- 多选：getSelection 不能有重复 id（2026-10-23） ---------------- */
+
+test('清空选择后连续 toggle 不产生重复 id', () => {
+  /**
+   * 触发路径：字幕面板的 Shift 范围选 = `setSelectedClipId(null)` + 逐个 `toggleSelection`。
+   * 旧实现里"主选为空"时这一条会**同时**成为主选、又被压进 extra，
+   * 于是 `getSelection()` 返回 `[a, a, b]` —— 多选计数比实际多 1，批量操作会重复处理同一条。
+   */
+  const store = storeModule.createStore(withClips(BASE, [makeClip('clp_1'), makeClip('clp_2'), makeClip('clp_3')]));
+  store.setSelectedClipId(null);
+  store.toggleSelection('clp_1');
+  store.toggleSelection('clp_2');
+  store.toggleSelection('clp_3');
+  deepEq(store.getSelection(), ['clp_1', 'clp_2', 'clp_3'], '无重复');
+  eq(store.getSelectedClipId(), 'clp_1', '第一条成为主选');
+});
+
+test('已有主选时 Ctrl 加选仍正确（回归）', () => {
+  const store = storeModule.createStore(withClips(BASE, [makeClip('clp_1'), makeClip('clp_2')]));
+  store.setSelectedClipId('clp_1');
+  store.toggleSelection('clp_2');
+  deepEq(store.getSelection(), ['clp_1', 'clp_2'], '两条');
+  eq(store.getSelectedClipId(), 'clp_1', '主选不变');
+});
+
+test('减选后主选提升为第一个次选（回归）', () => {
+  const store = storeModule.createStore(withClips(BASE, [makeClip('clp_1'), makeClip('clp_2'), makeClip('clp_3')]));
+  store.setSelectedClipId(null);
+  store.toggleSelection('clp_1');
+  store.toggleSelection('clp_2');
+  store.toggleSelection('clp_3');
+  store.toggleSelection('clp_1'); // 减掉主选
+  deepEq(store.getSelection(), ['clp_2', 'clp_3'], '剩两条');
+  eq(store.getSelectedClipId(), 'clp_2', '次选提升为主选');
+});
+
 /* ---------------- 汇总 ---------------- */
 
 const total = passed + failures.length;

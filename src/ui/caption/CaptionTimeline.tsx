@@ -293,13 +293,118 @@ export function CaptionTimeline(props: CaptionTimelineProps): ReactElement {
    * 否则条块会顶出轨道右边被裁掉。预览增长是连续的，视觉上像轻微"缩小"，
    * 比"拖到边界就拖不动"更符合直觉（松手后仍会按真实数据重排）。
    */
+  /* ---------------- 框选（C5-6） ---------------- */
+
+  /**
+   * 框选矩形（**相对轨道左上角**的坐标）。`null` = 没在框选。
+   *
+   * 用相对坐标而不是 `clientX/Y`：滚动/布局变化时相对位置不变，
+   * 比较条块时也统一换算到同一个坐标系，不必反复加 rect.left。
+   */
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+
+  /** 拖出框选的最小位移（px）：小于它视为"点了一下空白"，不是框选。 */
+  const MARQUEE_THRESHOLD = 4;
+
+  function localPoint(event: { clientX: number; clientY: number }, track: HTMLDivElement): { x: number; y: number } {
+    const rect = track.getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+  }
+
+  /**
+   * 在**轨道空白处**按下 → 开始框选。
+   *
+   * 必须判 `event.target === track`：条块和把手的 `pointerdown` 会冒泡到轨道，
+   * 不排除的话"点条块"也会开始框选（随后 click 又被吞掉，条块就点不中了）。
+   */
+  function beginMarquee(event: React.PointerEvent<HTMLDivElement>): void {
+    const track = trackRef.current;
+    if (track === null) return;
+    if (event.target !== track) return;
+    if (event.button !== 0) return;
+
+    const origin = localPoint(event, track);
+    const additive = event.ctrlKey || event.metaKey;
+    setMarquee({ x0: origin.x, y0: origin.y, x1: origin.x, y1: origin.y });
+
+    /**
+     * **用 window 监听，不用 `setPointerCapture`。**
+     *
+     * 曾用 capture + 元素上的 onPointerMove/onPointerUp，实测拖动一开始就失败：
+     * 渲染选框元素会让 track 的子节点变化 → 重新渲染 → **capture 丢失并触发 pointercancel** →
+     * `setMarquee(null)`，表现为"框一下就不见了"。
+     * 这和拖把手用的是同一套模式（window 兜底），行为一致也更好调试。
+     */
+    const onMove = (moveEvent: PointerEvent): void => {
+      const point = localPoint(moveEvent, track);
+      setMarquee({ x0: origin.x, y0: origin.y, x1: point.x, y1: point.y });
+    };
+
+    const onUp = (upEvent: PointerEvent): void => {
+      cleanup();
+      const point = localPoint(upEvent, track);
+      const left = Math.min(origin.x, point.x);
+      const right = Math.max(origin.x, point.x);
+      const width = right - left;
+      setMarquee(null);
+
+      const trackRect = track.getBoundingClientRect();
+      if (width < MARQUEE_THRESHOLD) {
+        // 几乎没拖：当成"点空白"，清空选择（按着 Ctrl 时不动，避免误清）
+        if (!additive) store.setSelectedClipId(null);
+        return;
+      }
+
+      const hitIds: string[] = [];
+      for (const node of track.querySelectorAll<HTMLElement>('[data-v="caption-tl-block"]')) {
+        const rect = node.getBoundingClientRect();
+        const blockLeft = rect.left - trackRect.left;
+        const blockRight = rect.right - trackRect.left;
+        // **相交判定**（不是包含）：矩形起点落在块内部时那块也要选中
+        if (blockLeft < right && left < blockRight) {
+          const id = node.getAttribute('data-clip-id');
+          if (id !== null) hitIds.push(id);
+        }
+      }
+
+      if (additive) {
+        // Ctrl 框选 = 加到现有选择集（已选的保持，不重复 toggle）
+        for (const id of hitIds) {
+          if (!selectedIds.includes(id)) store.toggleSelection(id);
+        }
+        return;
+      }
+      store.setSelectedClipId(null);
+      for (const id of hitIds) store.toggleSelection(id);
+    };
+
+    function cleanup(): void {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+    }
+    function onCancel(): void {
+      cleanup();
+      setMarquee(null);
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+  }
+
   const displayTotal =
     draft === null ? totalFrames : Math.max(totalFrames, draft.startFrame + draft.durationFrames);
   const totalMs = frameToMs(totalFrames, fpsMilli);
 
   return (
     <div className="v-caption-tl" data-v="caption-timeline">
-      <div className="v-caption-tl__track" data-v="caption-tl-track" ref={trackRef}>
+      <div
+        className="v-caption-tl__track"
+        data-v="caption-tl-track"
+        ref={trackRef}
+        onPointerDown={beginMarquee}
+      >
         {rows.map((row) => {
           const activeDraft = draft !== null && draft.clipId === row.clipId ? draft : null;
           const startFrame = activeDraft === null ? row.startFrame : activeDraft.startFrame;
@@ -361,6 +466,18 @@ export function CaptionTimeline(props: CaptionTimelineProps): ReactElement {
             </div>
           );
         })}
+        {marquee === null ? null : (
+          <div
+            className="v-caption-tl__marquee"
+            data-v="caption-tl-marquee"
+            style={{
+              left: Math.min(marquee.x0, marquee.x1),
+              top: Math.min(marquee.y0, marquee.y1),
+              width: Math.abs(marquee.x1 - marquee.x0),
+              height: Math.abs(marquee.y1 - marquee.y0),
+            }}
+          />
+        )}
       </div>
       <div className="v-caption-tl__axis" data-v="caption-tl-axis">
         <span>{formatCaptionMs(0)}</span>

@@ -37,10 +37,12 @@ const ORIGIN_BADGE: Record<TextOrigin, string | null> = {
 
 export interface CaptionListProps {
   rows: CaptionRow[];
-  /** 当前选中的片段 id（多选时是其中任意一个，用于"选中态"样式）。 */
+  /** 全部选中的片段 id（多选时多条）。 */
   selectedIds: readonly string[];
-  /** 点击一条：跳播放头 + 选中。 */
-  onPick: (row: CaptionRow) => void;
+  /** **主选**（多选时决定属性栏显示谁，也用于实线/虚线的区分）。 */
+  primaryId: string | null;
+  /** 点击一条。`modifiers` 区分普通点击 / Ctrl 加选 / Shift 范围选。 */
+  onPick: (row: CaptionRow, modifiers: { ctrl: boolean; shift: boolean }) => void;
   /**
    * 需要滚进可视区的那一条（null = 不滚）。
    *
@@ -52,7 +54,7 @@ export interface CaptionListProps {
 }
 
 export function CaptionList(props: CaptionListProps): ReactElement {
-  const { rows, selectedIds, onPick, focusId = null } = props;
+  const { rows, selectedIds, primaryId, onPick, focusId = null } = props;
 
   /** 正在编辑的片段 id（null = 没有在编辑）。 */
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -142,9 +144,14 @@ export function CaptionList(props: CaptionListProps): ReactElement {
             data-v="caption-row"
             data-clip-id={row.clipId}
             data-selected={selected ? 'true' : 'false'}
+            data-primary={row.clipId === primaryId ? 'true' : 'false'}
             data-active={active ? 'true' : 'false'}
             data-origin={row.origin}
-            onClick={() => onPick(row)}
+            onClick={(event) => {
+              const ctrl = event.ctrlKey || event.metaKey;
+              const shift = event.shiftKey;
+              onPick(row, { ctrl, shift });
+            }}
             onDoubleClick={() => {
               setEditingId(row.clipId);
               setDraft(row.text);

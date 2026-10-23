@@ -1075,6 +1075,8 @@ export function App(): ReactElement {
                     background: clip.text.background,
                     bold: clip.text.bold === true,
                     stroke: clip.text.stroke ?? null,
+                    // `origin` 必须导出：否则 E2E 无法验证"批量套模板后 AI 角标没被冲成 manual"
+                    origin: clip.text.origin ?? null,
                   },
             effects: clip.effects.map((effect) => effect.type),
             effectDetails: clip.effects.map((effect) => ({

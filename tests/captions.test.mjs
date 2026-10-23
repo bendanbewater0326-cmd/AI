@@ -40,6 +40,7 @@ function loadTsModule(relativeEntry, name) {
 
 const types = await loadTsModule('src/core/types.ts', 'types');
 const captions = await loadTsModule('src/core/captions.ts', 'captions');
+const textPresetsModule = await loadTsModule('src/core/textPresets.ts', 'textPresets');
 
 let passed = 0;
 const failures = [];
@@ -319,6 +320,59 @@ test('往返一致', () => {
     const text = captions.formatCaptionMs(ms);
     eq(captions.parseCaptionMs(text), ms, `往返 ${ms}`);
   }
+});
+
+/* ---------------- ⑧ buildDeleteOps（C5） ---------------- */
+
+console.log('⑧ buildDeleteOps');
+test('N 条 → N 个 removeClip，每个都带 removed（撤销要用）', () => {
+  const clips = [textClip('c1', 0, 30, '甲'), textClip('c2', 40, 30, '乙'), textClip('c3', 80, 30, '丙')];
+  const ops = captions.buildDeleteOps(clips);
+  eq(ops.length, 3, 'op 条数');
+  eq(ops.every((op) => op.op === 'removeClip'), true, '全是 removeClip');
+  deepEq(ops.map((op) => op.clipId), ['c1', 'c2', 'c3'], 'id 顺序');
+  eq(ops[0].removed.text.content, '甲', 'removed 带原片段');
+});
+test('空数组 → 空 op（不产生空撤销步）', () => {
+  eq(captions.buildDeleteOps([]).length, 0, 'op 条数');
+});
+
+/* ---------------- ⑨ buildTemplateOps（C5） ---------------- */
+
+console.log('⑨ buildTemplateOps');
+const PRESET = textPresetsModule.TEXT_PRESETS[0];
+
+test('保留每条自己的文本（套样式不是换文案）', () => {
+  const clips = [textClip('c1', 0, 30, '第一句'), textClip('c2', 40, 30, '第二句')];
+  const ops = captions.buildTemplateOps(clips, PRESET, { width: 1920, height: 1080 });
+  eq(ops.length, 2, 'op 条数');
+  eq(ops[0].to.content, '第一句', '第 1 条文本保留');
+  eq(ops[1].to.content, '第二句', '第 2 条文本保留');
+});
+test('**保留 origin**（presetToText 默认会写成 manual，冲掉 AI 角标）', () => {
+  const aiClip = textClip('c1', 0, 30, 'AI 字幕', {
+    text: types.createTextContent({ content: 'AI 字幕', origin: 'ai' }),
+  });
+  const ops = captions.buildTemplateOps([aiClip], PRESET, { width: 1920, height: 1080 });
+  eq(ops[0].to.origin, 'ai', 'AI 来源没被冲掉');
+});
+test('caption 来源同样保留', () => {
+  const clip = textClip('c1', 0, 30, '字幕', {
+    text: types.createTextContent({ content: '字幕', origin: 'caption' }),
+  });
+  const ops = captions.buildTemplateOps([clip], PRESET, { width: 1920, height: 1080 });
+  eq(ops[0].to.origin, 'caption', 'caption 保留');
+});
+test('按项目分辨率缩放字号（720p 应与 1080p 不同）', () => {
+  const clip = textClip('c1', 0, 30, '甲');
+  const at1080 = captions.buildTemplateOps([clip], PRESET, { width: 1920, height: 1080 })[0];
+  const at720 = captions.buildTemplateOps([clip], PRESET, { width: 1280, height: 720 })[0];
+  eq(at1080.to.fontSize > at720.to.fontSize, true, `1080p(${at1080.to.fontSize}) 应大于 720p(${at720.to.fontSize})`);
+});
+test('非文字片段被跳过', () => {
+  const video = videoClip('v1', 0, 300);
+  const ops = captions.buildTemplateOps([video], PRESET, { width: 1920, height: 1080 });
+  eq(ops.length, 0, '不产生 op');
 });
 
 /* ---------------- 汇总 ---------------- */

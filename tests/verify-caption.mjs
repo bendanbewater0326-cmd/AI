@@ -1045,6 +1045,92 @@ try {
   }
 }
 
+// ---- ㉓ 框选（C5-6）：相交判定 / Ctrl 加选 / 点空白清空 ----
+/*
+ * **用合成 PointerEvent，不用 CDP 真实鼠标**。
+ *
+ * 实测 CDP 的 `Input.dispatchMouseEvent` 序列是
+ *   pointerdown → pointermove → **pointercancel@0,0**
+ * 浏览器在合成鼠标的第二次 move 就取消指针，选框"闪一下就不见"。
+ * 这是 CDP 合成鼠标的指针状态机限制（真机鼠标不会），
+ * 所以这里退让到页面内 dispatch，验证的是**框选逻辑本身**（相交判定/加选/清空）。
+ * 已经给 track 加了 `touch-action: none`（真机上是必需的，虽然 CDP 测不出来）。
+ */
+{
+  async function marqueeDrag(x0, y0, x1, y1, withCtrl = false) {
+    await page.session.evaluate(`(() => {
+      const track = document.querySelector('[data-v="caption-tl-track"]');
+      if (track === null) return false;
+      const base = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0, buttons: 1, ctrlKey: ${withCtrl ? 'true' : 'false'} };
+      track.dispatchEvent(new PointerEvent('pointerdown', { ...base, clientX: ${x0}, clientY: ${y0} }));
+      for (const t of [0.4, 0.75, 1]) {
+        const x = Math.round(${x0} + (${x1} - ${x0}) * t);
+        const y = Math.round(${y0} + (${y1} - ${y0}) * t);
+        window.dispatchEvent(new PointerEvent('pointermove', { ...base, clientX: x, clientY: y }));
+      }
+      window.dispatchEvent(new PointerEvent('pointerup', { ...base, buttons: 0, clientX: ${x1}, clientY: ${y1} }));
+      return true;
+    })()`);
+    await sleep(400);
+  }
+
+  const geo = JSON.parse(await page.session.evaluate(`(() => {
+    const blocks = Array.from(document.querySelectorAll('[data-v="caption-tl-block"]'));
+    const track = document.querySelector('[data-v="caption-tl-track"]');
+    const tr = track.getBoundingClientRect();
+    return JSON.stringify({
+      trackRight: Math.round(tr.right),
+      blocks: blocks.map((b) => { const r = b.getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom) }; }),
+    });
+  })()`));
+  const midY = Math.round((geo.blocks[0].top + geo.blocks[0].bottom) / 2);
+
+  const sel = () =>
+    page.session.evaluate(`JSON.stringify({
+      count: document.querySelectorAll('[data-v="caption-tl-block"][data-selected="true"]').length,
+      indexes: Array.from(document.querySelectorAll('[data-v="caption-tl-block"]')).map((b, i) => (b.getAttribute('data-selected') === 'true' ? i : -1)).filter((i) => i >= 0),
+      batchBar: !!document.querySelector('[data-v="batch-bar"]'),
+    })`).then(JSON.parse);
+
+  // ① 从块 0 与块 1 的间隙起手，拖到块 2 中间 → 相交的是块 1、2
+  await marqueeDrag(geo.blocks[0].right + 2, midY, Math.round((geo.blocks[2].left + geo.blocks[2].right) / 2), midY);
+  const first = await sel();
+  report.check(
+    `㉓ 框选相交判定：从间隙拖到第 3 块中间 → 选中 ${first.count} 条（索引 [${first.indexes.join(',')}]，期望 [1,2]）`,
+    first.count === 2 && first.indexes[0] === 1 && first.indexes[1] === 2,
+  );
+  report.check(`㉓b 框选后批量条自动弹出`, first.batchBar === true);
+
+  // ② Ctrl 框选最后一块 → 加选（不清掉已有的）
+  const geo2 = JSON.parse(await page.session.evaluate(`(() => {
+    const blocks = Array.from(document.querySelectorAll('[data-v="caption-tl-block"]'));
+    const n = blocks.length;
+    const r = blocks[n - 1].getBoundingClientRect();
+    const prev = blocks[n - 2].getBoundingClientRect();
+    return JSON.stringify({ gap: Math.round(prev.right + 2), lastLeft: Math.round(r.left), lastRight: Math.round(r.right), y: Math.round((r.top + r.bottom) / 2) });
+  })()`));
+  await marqueeDrag(geo2.gap, geo2.y, Math.round((geo2.lastLeft + geo2.lastRight) / 2), geo2.y, true);
+  const second = await sel();
+  report.check(
+    `㉓c Ctrl 框选是**加选**（${first.count} → ${second.count} 条，索引 [${second.indexes.join(',')}]）`,
+    second.count === first.count + 1 && second.indexes.includes(1) && second.indexes.includes(2),
+  );
+
+  // ③ 点空白（不拖）→ 清空
+  const geo3 = JSON.parse(await page.session.evaluate(`(() => {
+    const track = document.querySelector('[data-v="caption-tl-track"]');
+    const tr = track.getBoundingClientRect();
+    const b = document.querySelectorAll('[data-v="caption-tl-block"]')[0].getBoundingClientRect();
+    return JSON.stringify({ x: Math.round(tr.right - 4), y: Math.round((b.top + b.bottom) / 2) });
+  })()`));
+  await marqueeDrag(geo3.x, geo3.y, geo3.x, geo3.y);
+  const third = await sel();
+  report.check(
+    `㉓d 点空白清空选择（${third.count} 条）`,
+    third.count === 0 && third.batchBar === false,
+  );
+}
+
 } finally {
   await page.close();
   dev.kill();

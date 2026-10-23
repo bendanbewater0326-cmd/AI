@@ -27,6 +27,8 @@
  */
 import type { Clip, ClipOperation, Frame, Project, Result, TextContent, TextOrigin } from './types';
 import { fail, makeError, ok } from './types';
+import { presetToText } from './textPresets';
+import type { TextPreset } from './textPresets';
 
 /* ---------------- 列表 ---------------- */
 
@@ -253,6 +255,53 @@ export function buildShiftOps(
       })),
     },
   ]);
+}
+
+/* ---------------- 批量删除 ---------------- */
+
+/**
+ * 批量删除。
+ *
+ * 直接循环 `removeClip`（每个都要带 `removed` 才能撤销）。
+ * 调用方把这些 op 与其它操作拼在一次 dispatch 里 = **一个撤销步**。
+ */
+export function buildDeleteOps(clips: readonly Clip[]): ClipOperation[] {
+  return clips.map((clip) => ({ op: 'removeClip', clipId: clip.id, removed: clip }));
+}
+
+/* ---------------- 批量套模板 ---------------- */
+
+/**
+ * 批量套用**模板库**的样式（`core/textPresets` 的 10 个内置模板）。
+ *
+ * 两条必须遵守的规则：
+ *
+ * 1. **保留每条自己的文本**（`presetToText(preset, clip.text.content, size)`）——
+ *    套样式不是"把文案也换掉"，用户编辑过的字不能覆盖。
+ * 2. **保留 `origin`**（来源角标）。`presetToText` 内部走 `createTextContent`，
+ *    它的默认值是 `origin: 'manual'` —— 不显式带回的话，批量套一次模板，
+ *    所有 AI 字幕的角标都会变成「文字」。这是加可选字段的典型连带效应。
+ *
+ * `size` 是工程分辨率：模板按 1080p 设计，换分辨率要按 `height/1080` 缩放
+ * （`presetToText` 内部已处理，这里只负责透传）。
+ */
+export function buildTemplateOps(
+  clips: readonly Clip[],
+  preset: TextPreset,
+  size: { width: number; height: number },
+): ClipOperation[] {
+  const ops: ClipOperation[] = [];
+  for (const clip of clips) {
+    if (clip.text === null || clip.text === undefined) continue;
+    const styled = presetToText(preset, clip.text.content, size);
+    ops.push({
+      op: 'setClipText',
+      clipId: clip.id,
+      from: clip.text,
+      to: { ...styled, origin: clip.text.origin ?? 'manual' },
+    });
+  }
+  return ops;
 }
 
 /* ---------------- 批量样式 ---------------- */

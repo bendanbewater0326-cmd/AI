@@ -48,13 +48,16 @@
  * 切换按钮放在**状态栏右侧**而不是新起一行：左栏高度只够 8 条列表
  * （E2E ⑤b 卡着这个数），多一行 22px 就会掉到 7 条。
  */
-import { useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ReactElement } from 'react';
-import { store, useDoc, useSelection } from '../../core/store';
+import { store, useDoc } from '../../core/store';
 import { listCaptions } from '../../core/captions';
 import type { CaptionRow } from '../../core/captions';
 import type { Frame } from '../../core/types';
 import { CaptionList } from './CaptionList';
+import { BatchBar } from './BatchBar';
+import { findClipById } from '../../core/transitionTarget';
+import type { Clip } from '../../core/types';
 import { CaptionTimeline } from './CaptionTimeline';
 import { exportSrt, generateCaptions, hasTranscribeChannel, importSrtFile } from './actions';
 
@@ -107,6 +110,23 @@ function rowsEqual(left: CaptionRow[], right: CaptionRow[]): boolean {
   return true;
 }
 
+/**
+ * 读**多选**的选择集。
+ *
+ * 不能用 `useSelection()`（那是单选，多选时只返回主选）。
+ * 也不能直接 `useSyncExternalStore(store.subscribe, store.getSelection)`：
+ * `getSelection()` 每次返回新数组，`Object.is` 永远不相等 → **无限重渲染**。
+ * 所以快照用**字符串**（`'a,b,c'`），再 `useMemo` 拆回数组。
+ */
+function useSelectionIds(): string[] {
+  const key = useSyncExternalStore(
+    store.subscribe,
+    () => store.getSelection().join(','),
+    () => '',
+  );
+  return useMemo(() => (key === '' ? [] : key.split(',')), [key]);
+}
+
 export interface CaptionPanelProps {
   /** 跳播放头（由 App 注入 transport.seekTo）。 */
   onSeek: (frame: Frame) => void;
@@ -115,15 +135,31 @@ export interface CaptionPanelProps {
 export function CaptionPanel(props: CaptionPanelProps): ReactElement {
   const { onSeek } = props;
   const rows = useDoc((doc) => listCaptions(doc), rowsEqual);
-  const selectedId = useSelection();
+  const selectedIds = useSelectionIds();
+  /** Shift 范围选的锚点（最近一次**普通单击**的那条，不跟 toggle 走）。 */
+  const [anchorId, setAnchorId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   /** 当前视图（默认「列表」，跨会话记住上次的选择）。 */
   const [view, setView] = useState<CaptionView>(readStoredView);
 
-  const selectedIds = selectedId === null ? [] : [selectedId];
   const transcribeReady = hasTranscribeChannel();
+
+  /**
+   * 选中项对应的完整 `Clip`（批量操作要 `clip.text.content` 等，`CaptionRow` 不够）。
+   *
+   * 依赖 `rows`：它是 doc 变化的代理，doc 一变就重算，避免拿到过期片段。
+   */
+  const selectedClips = useMemo(() => {
+    const found: Clip[] = [];
+    for (const id of selectedIds) {
+      const hit = findClipById(store.getDoc(), id);
+      if (hit !== null && hit.clip.text !== null && hit.clip.text !== undefined) found.push(hit.clip);
+    }
+    return found;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedIds, rows]);
 
   /** 切视图：先改本地（立即生效），再落盘（失败不影响本次切换）。 */
   function changeView(next: CaptionView): void {
@@ -140,10 +176,37 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
     }, 3500);
   }
 
-  function pick(row: CaptionRow): void {
-    store.setSelectedClipId(row.clipId);
-    onSeek(row.startFrame);
-  }
+  /**
+   * 点一条字幕。三种模式（与资源管理器/主流剪辑软件一致）：
+   * - 普通点击：单选 + 跳播放头 + **更新锚点**
+   * - Ctrl/Cmd：加选/减选（**不动锚点**）
+   * - Shift：从锚点到目标的范围选（替换当前选择）
+   */
+  const pick = useCallback(
+    (row: CaptionRow, modifiers: { ctrl: boolean; shift: boolean }): void => {
+      if (modifiers.shift && anchorId !== null) {
+        const from = rows.findIndex((item) => item.clipId === anchorId);
+        const to = rows.findIndex((item) => item.clipId === row.clipId);
+        if (from !== -1 && to !== -1) {
+          const [lo, hi] = from <= to ? [from, to] : [to, from];
+          // 没有 setSelection：先清空再逐个加（见方案「待确认 ①」的取舍）
+          store.setSelectedClipId(null);
+          for (const item of rows.slice(lo, hi + 1)) store.toggleSelection(item.clipId);
+          onSeek(row.startFrame);
+          return;
+        }
+      }
+      if (modifiers.ctrl) {
+        store.toggleSelection(row.clipId);
+        onSeek(row.startFrame);
+        return;
+      }
+      store.setSelectedClipId(row.clipId);
+      setAnchorId(row.clipId);
+      onSeek(row.startFrame);
+    },
+    [anchorId, rows, onSeek],
+  );
 
   async function onFile(file: File): Promise<void> {
     setBusy(true);
@@ -266,9 +329,21 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
           导出字幕
         </button>
       </div>
+      {selectedClips.length >= 2 ? (
+        <BatchBar
+          clips={selectedClips}
+          primary={selectedClips[0] ?? null}
+          onClear={() => store.setSelectedClipId(null)}
+          onNotice={flash}
+        />
+      ) : null}
       <div className="v-caption-statusbar">
-        <span className="v-caption-panel__count" data-v="caption-count">
-          共 {rows.length} 条
+        <span
+          className="v-caption-panel__count"
+          data-v="caption-count"
+          data-multi={selectedIds.length > 1 ? 'true' : 'false'}
+        >
+          {selectedIds.length > 1 ? `已选 ${selectedIds.length} 条` : `共 ${rows.length} 条`}
         </span>
         {notice === null ? null : (
           <span className="v-caption-statusbar__notice" data-v="caption-notice">
@@ -304,7 +379,13 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
       {view === 'timeline' ? (
         <CaptionTimeline rows={rows} selectedIds={selectedIds} onSeek={onSeek} />
       ) : (
-        <CaptionList rows={rows} selectedIds={selectedIds} onPick={pick} focusId={selectedId} />
+        <CaptionList
+          rows={rows}
+          selectedIds={selectedIds}
+          primaryId={selectedIds[0] ?? null}
+          focusId={selectedIds[0] ?? null}
+          onPick={pick}
+        />
       )}
       {fileInput}
     </div>
