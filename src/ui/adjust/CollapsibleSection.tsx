@@ -53,7 +53,7 @@ export interface CollapsibleSectionProps {
   /**
    * 渲染模式。
    * - `panel`（默认）：左栏用的可折叠卡片（`.v-adjust__*`）
-   * - `plain`：**属性栏用的纯标题**（复刻 `.v-inspector__section` 的 DOM 与样式，不折叠）
+   * - `plain`：**属性栏用的纯标题**（复刻 `.v-inspector__section` 的 DOM 与样式）
    *
    * 为什么要这个模式：S5 要求属性栏与左栏共用同一套组件，但属性栏原来是
    * "平铺分组标题、不折叠"。直接套折叠卡片会改变它的外观与交互（用户要求"无感知升级"），
@@ -67,6 +67,52 @@ export interface CollapsibleSectionProps {
    * 设置面板传 `veditor:settings:openGroups` —— 两处折叠互不影响。
    */
   storageKey?: string;
+  /**
+   * 仅 `plain` 模式：标题变成**可折叠**（属性栏动态分组的折叠交互）。
+   * 与 `panel` 的区别是不写 localStorage——属性栏的折叠态跟片段类型走，
+   * 切换选中片段就回到默认态（不同片段间继承折叠配置只会造成"它怎么收起来了"的困惑）。
+   * 键盘回车/空格切换由 `<button>` 原生承担，无障碍能力与 panel 一致。
+   */
+  collapsible?: boolean;
+}
+
+/**
+ * plain + collapsible 的实现体（hooks 不能出现在条件分支里，拆成独立组件）。
+ * 折叠态是**纯本地 state**：不读写任何存储，每次挂载（选中片段变化 → 父组件用 key 重挂）
+ * 都回到 `defaultOpen`。
+ */
+function PlainCollapsibleSection(props: {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  testId: string;
+  defaultOpen: boolean;
+}): ReactElement {
+  const [open, setOpen] = useState(props.defaultOpen);
+  return (
+    <>
+      <div
+        className="v-inspector__group v-inspector__group--section"
+        data-v={props.testId}
+        data-open={open ? 'true' : 'false'}
+      >
+        <button
+          type="button"
+          className="v-inspector__section-toggle"
+          data-v={`${props.testId}-toggle`}
+          aria-expanded={open}
+          onClick={() => setOpen((previous) => !previous)}
+        >
+          <span className="v-inspector__section-caret" aria-hidden="true">
+            {open ? '▾' : '▸'}
+          </span>
+          <span className="v-inspector__section">{props.title}</span>
+        </button>
+        {props.actions === undefined ? null : <div className="v-adjust__actions">{props.actions}</div>}
+      </div>
+      {open ? props.children : null}
+    </>
+  );
 }
 
 export function CollapsibleSection(props: CollapsibleSectionProps): ReactElement {
@@ -79,11 +125,19 @@ export function CollapsibleSection(props: CollapsibleSectionProps): ReactElement
     testId,
     variant = 'panel',
     storageKey = DEFAULT_STORAGE_KEY,
+    collapsible = false,
   } = props;
 
   // 属性栏模式：**复刻既有 DOM**（`.v-inspector__group--section` + `.v-inspector__section`），
-  // 保证外观与"不折叠"的交互完全不变。
+  // 保证外观与"不折叠"的交互完全不变；`collapsible` 时同一套外观加折叠能力。
   if (variant === 'plain') {
+    if (collapsible) {
+      return (
+        <PlainCollapsibleSection title={title} actions={actions} testId={testId} defaultOpen={defaultOpen}>
+          {children}
+        </PlainCollapsibleSection>
+      );
+    }
     return (
       <>
         <div className="v-inspector__group v-inspector__group--section" data-v={testId}>

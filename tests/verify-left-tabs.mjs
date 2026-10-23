@@ -187,11 +187,8 @@ try {
   // ---- ④ 点未实现的 Tab：占位可见、素材面板隐藏 ----
   await click('[data-v="left-tab-audio"]');
   report.check(`④ 点「音频」→ 激活态切换（实测 ${await leftTab()}）`, (await leftTab()) === 'audio');
-  const audioTitle = await page.session.evaluate(
-    'document.querySelector(\'[data-v="tab-placeholder-title"]\')?.textContent || ""',
-  );
-  report.check(`④b 占位文案为「音频功能开发中」（实测「${audioTitle}」）`, String(audioTitle).trim() === '音频功能开发中');
-  report.check('④c 占位**可见**（不是只存在于 DOM）', (await visible('[data-v="tab-placeholder"]')) === true);
+  report.check('④b 「音频」显示音效面板（不再是占位）', (await visible('[data-v="sfx-panel"]')) === true);
+  report.check('④c 「音频」没有「功能开发中」占位', (await exists('[data-v="tab-placeholder"]')) === false);
   report.check('④d 素材面板已隐藏（不占位、不可点）', (await visible('[data-v="asset-empty"]')) === false && (await visible('[data-v="asset-card"]')) === false);
 
   // ---- ⑤ 未实现的 Tab 逐个点：都要给出对应的中文提示 ----
@@ -202,7 +199,7 @@ try {
    * **每做完一个 Tab 就把这里减一个**，别让"占位列表"和实际实现脱节
    * （10-23 就因为漏减「字幕」「调节」而红了 2 项）。
    */
-  const DONE = ['text', 'transition', 'effect', 'adjust', 'caption', 'settings'];
+  const DONE = ['text', 'transition', 'effect', 'adjust', 'caption', 'settings', 'audio'];
   const placeholders = [];
   for (const [key, label] of EXPECTED.slice(1).filter(([tabKey]) => !DONE.includes(tabKey))) {
     await click(`[data-v="left-tab-${key}"]`);

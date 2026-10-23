@@ -80,7 +80,9 @@ try {
   const before = await snapshot();
   report.check(`① 基准画面（平均亮度 ${before.meanLuma.toFixed(1)}）`, before.meanLuma > 10);
 
-  // ② 通过属性栏载入 .cube
+  // ② 通过属性栏载入 .cube（动态分组改造后 LUT 组默认折叠：先展开）
+  await page.session.evaluate(`document.querySelector('[data-v="inspector-section-lut-toggle"]')?.click()`);
+  await sleep(200);
   const { root } = await page.session.send('DOM.getDocument', { depth: -1 });
   const { nodeId } = await page.session.send('DOM.querySelector', {
     nodeId: root.nodeId,

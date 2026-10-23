@@ -2520,6 +2520,34 @@ body.v-track-dragging .v-track-head {
   letter-spacing: 0.04em;
 }
 
+/*
+ * 动态分组的可折叠标题（CollapsibleSection 的 plain+collapsible 模式）：
+ * 按钮承载整个标题行，外观与旧"纯标题"一致，只多一个折叠箭头。
+ */
+.v-inspector__section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.v-inspector__section-toggle:hover .v-inspector__section {
+  color: var(--v-fg);
+}
+
+.v-inspector__section-caret {
+  flex: 0 0 auto;
+  width: 10px;
+  font-size: 9px;
+  color: var(--v-fg-dim);
+}
+
 .v-inspector__textarea {
   height: auto;
   min-height: 34px;

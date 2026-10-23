@@ -48,7 +48,8 @@
     "e2e:left-tabs": "node tests/verify-left-tabs.mjs",
     "e2e:text-panel": "node tests/verify-text-panel.mjs",
     "e2e:transition-panel": "node tests/verify-transition-panel.mjs",
-    "e2e:effect-panel": "node tests/verify-effect-panel.mjs"
+    "e2e:effect-panel": "node tests/verify-effect-panel.mjs",
+    "e2e:inspector-groups": "node tests/verify-inspector-groups.mjs"
   },
   "dependencies": {
     "gifenc": "^1.0.3",

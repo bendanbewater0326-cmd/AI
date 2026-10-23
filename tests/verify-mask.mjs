@@ -122,7 +122,9 @@ try {
   const stats = JSON.parse(await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.compositorStats())'));
   report.check(`④ 没有 GL 错误（lastGlError=${stats.lastGlError}）`, stats.lastGlError === 0);
 
-  // ⑤ 属性栏能细调：反向一次 → 左右互换
+  // ⑤ 属性栏能细调：反向一次 → 左右互换（动态分组改造后蒙版组默认折叠：先展开）
+  await page.session.evaluate(`document.querySelector('[data-v="inspector-section-mask-toggle"]')?.click()`);
+  await sleep(200);
   const maskControls = JSON.parse(
     await page.session.evaluate(`JSON.stringify({
       shape: !!document.querySelector('[data-v="inspector-mask-shape"]'),

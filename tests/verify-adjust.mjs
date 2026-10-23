@@ -222,6 +222,9 @@ try {
   // ================= S3：LUT =================
   // 载入入口在属性栏（用户决策 ④：左栏不放文件选择，避免与素材拖拽语义混淆）
   {
+    // 动态分组改造后 LUT 组默认折叠：先展开（折叠交互本身由 verify-inspector-groups 专测）
+    await page.session.evaluate(`document.querySelector('[data-v="inspector-section-lut-toggle"]')?.click()`);
+    await sleep(200);
     const { root } = await page.session.send('DOM.getDocument', { depth: -1 });
     const { nodeId } = await page.session.send('DOM.querySelector', {
       nodeId: root.nodeId,
