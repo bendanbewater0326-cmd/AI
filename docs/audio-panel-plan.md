@@ -1,8 +1,9 @@
 # 左栏「音频」面板实现方案（轻量版：内置音效库）
 
-> 状态：**已拍板，A1 已交付**（2026-10-24）。四项决策全部确认：方案 C / 10 音效 3 分类 /
-> 音效进素材栏（「音效·」前缀）/ 三步交付。A1 = 数据层（`gen-sfx.mjs` + `sfxLibrary.ts` +
-> loader 接线 + `applyFirstAssetParams` 纯音频不跟随修复 + 17 单测）。
+> 状态：**已收官**（2026-10-24，A1+A2+A3 三步全部交付）。
+> A1 = 数据层（`gen-sfx.mjs` + `sfxLibrary.ts` + dataurl loader + 纯音频不跟随修复 + 17 单测）；
+> A2 = 面板 UI（`AudioPanel.tsx` + 点击应用 + 试听）；
+> A3 = 拖拽应用（第五个独立 MIME `application/x-veditor-sfx` + 音轨 ghost + 正式 E2E `verify-audio-panel` 17 断言）。
 > 摸底日期：2026-10-24。本文遵循既有面板方案的结构（参考 `effect-panel-plan.md` / `text-panel-plan.md`）。
 > 硬边界（用户已拍板）：**本轮不做交叉淡化、人声分离等引擎层改动，仅做上层 UI 接线。**
 

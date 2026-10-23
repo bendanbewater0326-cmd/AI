@@ -72,18 +72,22 @@ import { formatTimecode } from './TopBar';
 import {
   clearDraggingAsset,
   clearDraggingEffect,
+  clearDraggingSfx,
   clearDraggingText,
   clearDraggingTransition,
   getDraggingAssetId,
   getDraggingEffectId,
+  getDraggingSfxId,
   getDraggingTextId,
   getDraggingTransition,
   hasAssetDrag,
   hasEffectDrag,
+  hasSfxDrag,
   hasTextDrag,
   hasTransitionDrag,
   readAssetDrag,
   readEffectDrag,
+  readSfxDrag,
   readTextDrag,
   readTransitionDrag,
 } from './dnd';
@@ -93,6 +97,7 @@ import { transitionPresetById } from '../core/transitionPresets';
 import { buildTransitionOps, clipAtFrame, resolveDuration, resolveTransitionTarget, snapToSeam } from '../core/transitionTarget';
 import { effectPresetById } from '../core/effectPresets';
 import { buildEffectOps, resolveEffectTarget } from '../core/effectTarget';
+import { ensureSfxAsset, sfxPresetById } from './audio/sfxLibrary';
 
 /**
  * 拖转场时的接缝吸附半径（px）。
@@ -638,6 +643,47 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onDragOver(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasSfxDrag(event.dataTransfer)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      const target = dropTargetAt(event);
+      const presetId = getDraggingSfxId();
+      if (target === null || presetId === null) {
+        store.setDropGhost(null);
+        return;
+      }
+      const preset = sfxPresetById(presetId);
+      if (preset === null) {
+        store.setDropGhost(null);
+        return;
+      }
+      // ghost 预检与 buildPlaceAssetOps 的拒绝理由同一套口径（那条规则只有一个定义点，
+      // 这里只是"资产还没导入时"的轻量预览版：类型 / 锁定 / 隐藏）。
+      const track = target.track;
+      const durationFrames = Math.max(1, secondsToFrames(preset.seconds, store.getDoc().fpsMilli));
+      if (track.kind !== 'audio') {
+        store.setDropGhost({
+          trackId: track.id,
+          startFrame: target.frame,
+          durationFrames: 1,
+          valid: false,
+          reason: '音效只能放到音频轨',
+        });
+        return;
+      }
+      if (track.locked || track.hidden) {
+        store.setDropGhost({
+          trackId: track.id,
+          startFrame: target.frame,
+          durationFrames: 1,
+          valid: false,
+          reason: track.locked ? `轨道 ${track.name} 已锁定` : `轨道 ${track.name} 已隐藏`,
+        });
+        return;
+      }
+      store.setDropGhost({ trackId: track.id, startFrame: target.frame, durationFrames, valid: true });
+      return;
+    }
     if (hasEffectDrag(event.dataTransfer)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
@@ -751,7 +797,8 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
       !hasAssetDrag(event.dataTransfer) &&
       !hasTextDrag(event.dataTransfer) &&
       !hasTransitionDrag(event.dataTransfer) &&
-      !hasEffectDrag(event.dataTransfer)
+      !hasEffectDrag(event.dataTransfer) &&
+      !hasSfxDrag(event.dataTransfer)
     ) {
       return;
     }
@@ -768,6 +815,45 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   }
 
   function onDrop(event: React.DragEvent<HTMLCanvasElement>): void {
+    if (hasSfxDrag(event.dataTransfer)) {
+      event.preventDefault();
+      const presetId = readSfxDrag(event.dataTransfer) ?? getDraggingSfxId();
+      clearDraggingSfx();
+      store.setDropGhost(null);
+      if (presetId === null) return;
+      const target = dropTargetAt(event);
+      if (target === null) return;
+      const preset = sfxPresetById(presetId);
+      if (preset === null) return;
+      // 音效资产**首次使用时**才经导入管线注册（与点击应用同一个 ensure，不是第二条导入路径）；
+      // 落轨走 buildPlaceAssetOps（与素材同一套规则：类型/锁定/隐藏/占用都在那一个定义点里拒绝）
+      void (async () => {
+        store.setBusy('正在添加音效…');
+        try {
+          const ensured = await ensureSfxAsset(preset);
+          if (!ensured.ok) {
+            store.pushError(ensured.error);
+            return;
+          }
+          const docNow = store.getDoc();
+          const asset = docNow.assets.find((item) => item.id === ensured.value.assetId);
+          if (asset === undefined) {
+            store.pushError(makeError('E_INVALID_PROJECT', '音效导入后找不到资产', preset.fileName));
+            return;
+          }
+          const plan = buildPlaceAssetOps(docNow, asset, target.frame, { trackId: target.track.id });
+          if ('message' in plan) {
+            store.pushError(makeError('E_INVALID_PROJECT', plan.message));
+            return;
+          }
+          store.dispatch(plan.ops, `拖入音效（${preset.name}）`);
+          store.setSelectedClipId(plan.clipId);
+        } finally {
+          store.setBusy(null);
+        }
+      })();
+      return;
+    }
     if (hasEffectDrag(event.dataTransfer)) {
       event.preventDefault();
       const presetId = readEffectDrag(event.dataTransfer) ?? getDraggingEffectId();

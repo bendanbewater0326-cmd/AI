@@ -214,3 +214,51 @@ export function readEffectDrag(dataTransfer: DataTransfer | null): string | null
   const prefix = 'veditor-effect:';
   return fallback.startsWith(prefix) ? fallback.slice(prefix.length) : null;
 }
+
+/* ================= 内置音效（左栏「音频」→ 时间线的音频轨上） ================= */
+
+/**
+ * 音效的 MIME（第五种独立 MIME）。
+ *
+ * 落点语义：**只能落音频轨**（拖到视频轨要红 ghost + 可读原因），时长来自预设表。
+ * 载荷是预设 id 而不是资产 id——音效资产在**首次使用时**才经导入管线注册（见
+ * `ui/audio/sfxLibrary.ensureSfxAsset`），拖起时可能还没有资产。
+ */
+export const SFX_MIME = 'application/x-veditor-sfx';
+
+/** 正在拖的音效预设 id（dragover 阶段读不到 getData，只能靠模块变量）。 */
+let draggingSfxId: string | null = null;
+
+export function getDraggingSfxId(): string | null {
+  return draggingSfxId;
+}
+
+export function clearDraggingSfx(): void {
+  draggingSfxId = null;
+}
+
+/** 拖起一张音效卡。 */
+export function setSfxDrag(dataTransfer: DataTransfer | null, presetId: string): void {
+  draggingSfxId = presetId;
+  if (dataTransfer === null) return;
+  dataTransfer.setData(SFX_MIME, presetId);
+  // 同前四种：某些 WebView2 版本在 `types` 里不认纯自定义 MIME，补一个带前缀的 text/plain 兜底
+  dataTransfer.setData('text/plain', `veditor-sfx:${presetId}`);
+  dataTransfer.effectAllowed = 'copy';
+}
+
+/** 这次拖拽是不是音效卡（dragover 阶段只能用 types 判断）。 */
+export function hasSfxDrag(dataTransfer: DataTransfer | null): boolean {
+  if (dataTransfer === null) return false;
+  return Array.from(dataTransfer.types).includes(SFX_MIME);
+}
+
+/** 读出被拖的音效预设 id（drop 阶段）。 */
+export function readSfxDrag(dataTransfer: DataTransfer | null): string | null {
+  if (dataTransfer === null) return null;
+  const direct = dataTransfer.getData(SFX_MIME);
+  if (direct !== '') return direct;
+  const fallback = dataTransfer.getData('text/plain');
+  const prefix = 'veditor-sfx:';
+  return fallback.startsWith(prefix) ? fallback.slice(prefix.length) : null;
+}

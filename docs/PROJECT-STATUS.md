@@ -50,10 +50,10 @@
 | 里程碑 | M1 能跑 / M2 能剪 / M3 导出 / M4 AI / **M5-M6（P2）13/13 全部交付** | — |
 | 批次增强 | A（音频·导出·UI）/ B（M4 AI）/ C1（文字·调色·音量）/ C2（转场·入出点）/ C3（变速·关键帧·剪贴板）全部交付 | — |
 | 源码 | **92 个 ts/tsx**（+ `app.css` = 93 文件 / 37002 行） | `find src \( -name '*.ts' -o -name '*.tsx' \) \| wc -l` |
-| 单测 | **641 条 / 38 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
-| E2E | **61 个 `verify-*.mjs`**（60 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建产物 | `dist/main.js` **675.5KB**（esbuild 单包） | `npm run build` |
-| 时基静态检查 | **扫描 93 个文件，0 处非法换算** | `npm run check` |
+| 单测 | **733 条 / 42 个脚本全绿** | `npm test`（每个脚本末尾打印 `通过 N / N`） |
+| E2E | **65 个 `verify-*.mjs`**（64 个浏览器 E2E + 1 个 Node 性质测试 `verify-d-cases`；全量 65/65） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建产物 | `dist/main.js` **862.6KB**（esbuild 单包；含 10 个内联音效 ~137KB） | `npm run build` |
+| 时基静态检查 | **扫描 110 个文件，0 处非法换算** | `npm run check` |
 
 > 单测分项：55 时基 / 42 核心 / 15 时间线 / 6 时间码 / 7 剪辑接线 / 11 音频 / 23 AI / 9 转场 / 16 WebM / 18 云 LLM / 27 宿主命令 / 16 ZIP / 20 粗剪 / 10 代理 / 10 工程文件 / 13 预设 / 10 降噪 / 11 曲线 / 19 字幕 / 9 LUT / 10 蒙版 / 10 多机位 / 19 语音识别 / 33 落轨 / 12 分离音频 / 10 导出混音筛选 / 19 画面旋转翻转 / 11 定格倒放 / 8 撤销合并 / 16 音量映射 / 20 时间线几何 / 22 轨道结构 / 16 重链匹配 / 12 自动恢复 / 11 草稿缓存 / 18 文字模板 / 14 转场落点 / 32 特效预设。
 > 文件数把上面管道的 `xargs wc -l | tail -1` 换成 `wc -l` 即可。
@@ -3145,6 +3145,8 @@ D:/项目专用文件夹/剪辑工具/
 | **2026-10-23（转场面板第二步）** | 拖拽 + 接缝吸附 + 落点预览 + 角标按时长 | 第三个独立 MIME（带 `预设id\|秒`）；`snapToSeam` ±12px（不吸附会命中左段、叠化直接判不可用）；`ephemeral.transitionGhost` + 加宽楔形（绿/红）；角标从固定 12px 改成按时长（入场算 D/2）；量宽度不能用颜色筛（片段底色本身就是淡紫），改成两次渲染做差；19 项 E2E |
 | **2026-10-23（转场面板第一步）** | 3 种转场 + 时长档位 + 点击应用 | 摸底确认只有 3 种且只有 opacity 自由度；`transitionPresets`（side 写进数据）+ `transitionTarget`（半开区间 / 左邻严格相等 / 两侧互斥 / 时长夹取，属性栏也改调它）；叠化缺左邻给提示不改文档；缩略图纯 DOM 无渐变；14 单测 + 14 项 E2E |
 | **2026-10-23（文本面板第三步）** | 「我的预设」（**文本面板收官**） | 复用 R-053：`capturePreset`/`buildPresetOps`/settings 存储，只做筛选展示；我的预设（主色描边 + 可删）与系统预设（灰边 + 无删除按钮）明确区分；存预设默认名取当前文案；`PRESETS_CHANGED` 广播修掉"左栏存了右栏看不到"；33 项 E2E |
+| **2026-10-24（属性栏动态分组）** | 按片段类型条件渲染，消除参数堆砌 | 视频=基础变换/画面调节(开)+曲线/LUT/蒙版/混合(折)；音频=音量/淡入淡出(开)+音频效果(折)，画面类**不进 DOM**；文字=内容/样式(开)+位置变换(折)；混合多选只渲染基础变换+音量调节；批量修改**一次 dispatch 一个撤销步**（batchShown/batchBlur 防未输入失焦覆盖他片）；折叠复用 CollapsibleSection（plain+collapsible，不持久化、按 key 重挂回默认态）；**踩坑**：React 受控 range 必须用原生 value setter 赋值（直接 `el.value=` 会被值跟踪去重，onChange 不触发）；`verify-inspector-groups` 18 断言（含像素级 129→56.7 与撤销恢复）；属性栏相关 E2E 全过 |
+| **2026-10-24（音频面板 A1–A3，收官）** | 内置音效库：数据层 + 面板 UI + 拖拽 | **方案 C**（`docs/audio-panel-plan.md`）：构建期 ffmpeg 合成 10 个纯音频 mp4 内联（`gen-sfx.mjs`，AAC 单声道 48k，~97KB），运行时走现有导入管线注册为真资产（media 层零改动）；`ensureSfxAsset` 按 hashKey 幂等；面板与文本/特效面板同一套手感（点击应用 + ▶ 试听 + 拖拽）；第五个独立 MIME（载荷=预设 id）；ghost 只画音轨、拖视频轨给可读原因；**踩坑**：ffmpeg `sine` 源默认振幅只有 1/8（-18dB，首版音效听不见→补增益+响度门禁）；esbuild `base64` loader 是裸字符串、要 `dataurl`；AAC 是专有编解码器、开源 Chromium webview 解不了（客户端预览无声的原因）；顺带修 `applyFirstAssetParams`（纯音频资产不再把工程 fps 悄悄重置成 30）；17 单测 + `verify-audio-panel` 17 项 E2E |
 
 **当前**：**P0 + P1 + P2 共 64 条全部落地**（4 条为"部分交付"，口径见 §7.1）；postMessage 命令通道已实现（§7.2）。
 需求层面已经没有新功能要补。**UI 重构线（对标 opencut-classic，`docs/ui-refactor-plan.md`）

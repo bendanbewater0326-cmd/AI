@@ -15,6 +15,7 @@ import type { ReactElement } from 'react';
 import { makeError } from '../../core/types';
 import { buildPlaceAssetOps } from '../../core/placement';
 import { store } from '../../core/store';
+import { clearDraggingSfx, setSfxDrag } from '../dnd';
 import {
   SFX_CATEGORIES,
   SFX_PRESETS,
@@ -126,9 +127,18 @@ export function AudioPanel(): ReactElement {
                   data-preset-id={preset.id}
                   data-category={preset.category}
                   aria-label={`${preset.name}（点击添加到音频轨）`}
-                  title={`${preset.name}（点击添加到音频轨播放头处）`}
+                  title={`${preset.name}（点击添加到音频轨播放头处，或拖到音轨任意位置）`}
                   disabled={addingName !== null}
                   onClick={() => void applyPreset(preset)}
+                  /**
+                   * 可拖到时间线（A3）：独立 MIME（`application/x-veditor-sfx`），落点语义是
+                   * "只能落音频轨"——与素材（按目标轨+占用避让）、文字（落文字轨）都不同，
+                   * 所以不复用素材的 MIME。载荷是**预设 id**：音效资产首次使用时才经导入
+                   * 管线注册，拖起时可能还没有资产。
+                   */
+                  draggable
+                  onDragStart={(event) => setSfxDrag(event.dataTransfer, preset.id)}
+                  onDragEnd={clearDraggingSfx}
                 >
                   <span className="v-sfxcard__stage" data-v="sfx-preset-stage" data-playing={playing}>
                     {/* 波形装饰（纯 CSS，静态）：表达"这是声音"而不是用缩略图 */}
