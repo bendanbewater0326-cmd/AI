@@ -34,7 +34,8 @@ import type { ReactElement } from 'react';
 import { createClip, createTextContent, makeError } from '../core/types';
 import type { TextContent } from '../core/types';
 import { ensureTextTrackOps } from '../core/placement';
-import { TEXT_CATEGORIES, TEXT_CLIP_SECONDS, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
+import { TEXT_CATEGORIES, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
+import { defaultClipSeconds } from '../core/prefs';
 import type { TextCategory, TextPreset } from '../core/textPresets';
 import { MAX_PRESET_NAME, buildPresetOps, capturePreset, createPreset } from '../core/preset';
 import type { Preset } from '../core/preset';
@@ -134,7 +135,7 @@ export function TextPanel(): ReactElement {
   function createText(text: TextContent, label: string): void {
     const doc = store.getDoc();
     const startFrame = store.getPlayheadFrame();
-    const durationFrames = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, doc.fpsMilli));
+    const durationFrames = Math.max(1, secondsToFrames(defaultClipSeconds(), doc.fpsMilli));
     const { ops, trackId } = ensureTextTrackOps(doc, startFrame, durationFrames);
     const clip = createClip({
       assetId: '',

@@ -130,6 +130,15 @@ test('保留 1 位小数', () => {
 
 /* ---------------- ② keymapView ---------------- */
 
+test('defaultClipSeconds() 跟着偏好走（业务代码的唯一读取点）', () => {
+  memory.clear();
+  eq(prefs.defaultClipSeconds(), 3, '默认 3 秒');
+  prefs.writePrefs({ defaultClipSeconds: 5 });
+  eq(prefs.defaultClipSeconds(), 5, '写入后 5 秒');
+  prefs.writePrefs({ defaultClipSeconds: 999 });
+  eq(prefs.defaultClipSeconds(), prefs.MAX_DEFAULT_SECONDS, '超范围被 clamp 后读取也要是新值');
+});
+
 console.log('② keymapView');
 
 test('KEY_BINDINGS 里每一条都有分类（掉一条就会进兜底的全局功能）', () => {

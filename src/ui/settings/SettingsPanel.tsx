@@ -1,13 +1,13 @@
 /**
- * 左栏「设置」面板（S2）。
+ * 左栏「设置」面板（S2 外壳，S3/S4 补齐后五组全部可用）。
  *
  * ## 五组结构（与调节面板同一套折叠规范）
  *
  * ```
  * ▼ 外观      主题（默认 / 高对比）
- * ▶ 编辑偏好  吸附开关 + 默认素材时长（S4）
+ * ▶ 编辑偏好  吸附开关 + 新建文字片段的默认时长
  * ▶ 缓存      占用统计 + 打开缓存管理
- * ▶ 快捷键    从 KEY_BINDINGS 自动生成（S3）
+ * ▶ 快捷键    四个分类，从 KEY_BINDINGS 自动生成
  * ▶ 关于      版本 / 构建时间 / 隐私说明 / 清空本地数据
  * ```
  *
@@ -20,7 +20,7 @@
  * |---|---|
  * | 外观 | `ui/theme` 的 `getTheme` / `setTheme` / `subscribeTheme`（与顶栏主题按钮同一个开关）|
  * | 缓存 | `ui/CacheDialog`（同一个组件，第二处入口）+ `media/draftCache.cacheStats` |
- * | 编辑偏好 | `core/store` 的 `setSnapEnabled`（S1 已把吸附改成持久化偏好）|
+ * | 编辑偏好 | `core/store` 的 `setSnapEnabled`（S1 已把吸附改成持久化偏好）+ `core/prefs` 的默认时长 |
  * | 快捷键 | `core/keymap.KEY_BINDINGS` → `ui/settings/keymapView`（不手写表）|
  * | 关于 | `ui/settings/clearLocalData`（清 localStorage + IndexedDB + OPFS 缓存）|
  *
@@ -31,15 +31,19 @@
  * 「默认 / 高对比」，不是「浅色 / 深色」—— 真做深色要给 3710 行 CSS 补一整套
  * 深色变量，属于独立任务，不在"零底层改动"范围内。
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactElement } from 'react';
 import { store, useSnapEnabled } from '../../core/store';
+import { detectPlatform } from '../../core/keymap';
+import { MAX_DEFAULT_SECONDS, MIN_DEFAULT_SECONDS, readPrefs, writePrefs } from '../../core/prefs';
 import { getTheme, setTheme, subscribeTheme } from '../theme';
 import type { Theme } from '../theme';
 import { CacheDialog, formatBytes } from '../CacheDialog';
 import { cacheStats, isCacheAvailable } from '../../media/draftCache';
 import type { CacheStats } from '../../media/draftCache';
 import { CollapsibleSection } from '../adjust/CollapsibleSection';
+import { AdjustRow } from '../adjust/AdjustRow';
+import { groupBindings } from './keymapView';
 import { clearLocalData, localDataKeys } from './clearLocalData';
 // 构建时间的格式化只应有一份：直接用顶栏那两个（本文件不复刻一份 pad 逻辑）
 import { formatBuildTime } from '../TopBar';
@@ -71,6 +75,21 @@ export function SettingsPanel(props: SettingsPanelProps): ReactElement {
 
   /* ---------------- 编辑偏好 ---------------- */
   const snapEnabled = useSnapEnabled();
+
+  /**
+   * 默认素材时长：本地状态负责"拖动中的显示"，提交时才写盘。
+   *
+   * 初始值从偏好读（不写死 3）—— 老用户上次改过 5 秒，打开面板就该是 5。
+   */
+  const [clipSeconds, setClipSeconds] = useState<number>(() => readPrefs().defaultClipSeconds);
+  const commitClipSeconds = useCallback((next: number): void => {
+    // `writePrefs` 已经把范围夹到 0.5–60，回写后用它作为唯一显示值
+    setClipSeconds(writePrefs({ defaultClipSeconds: next }).defaultClipSeconds);
+  }, []);
+
+  /* ---------------- 快捷键（纯展示，不手写表） ---------------- */
+  const keyGroups = useMemo(() => groupBindings(detectPlatform()), []);
+  const platform = useMemo(() => detectPlatform(), []);
 
   /* ---------------- 缓存 ---------------- */
   const [cacheOpen, setCacheOpen] = useState(false);
@@ -176,6 +195,22 @@ export function SettingsPanel(props: SettingsPanelProps): ReactElement {
           关掉后拖动片段不再自动对齐，可自由挪动。这个设置会记住（重开还是关掉的状态），
           也可以随时按 <kbd className="v-settings__kbd">N</kbd> 切换。
         </div>
+        {/* 默认时长：与吸附同一个组（都是"编辑行为偏好"），拖动中不写盘，松手才写 */}
+        <AdjustRow
+          label="时长"
+          testId="settings-clip-seconds"
+          ariaLabel="新建文字片段的默认时长（秒）"
+          value={clipSeconds}
+          min={MIN_DEFAULT_SECONDS}
+          max={MAX_DEFAULT_SECONDS}
+          step={0.5}
+          onChange={(next) => setClipSeconds(next)}
+          onCommit={commitClipSeconds}
+        />
+        <div className="v-settings__note" data-v="settings-clip-seconds-note">
+          新建文字片段的默认时长（{clipSeconds} 秒）。点模板、工具栏「文字」、拖模板到时间线
+          <strong>都读这一个值</strong>；只影响之后新建的片段，已有片段时长不变。
+        </div>
       </CollapsibleSection>
 
       {/* ================= 缓存 ================= */}
@@ -210,15 +245,37 @@ export function SettingsPanel(props: SettingsPanelProps): ReactElement {
         </div>
       </CollapsibleSection>
 
-      {/* ================= 快捷键（S3 接入） ================= */}
+      {/* ================= 快捷键 ================= */}
       <CollapsibleSection
         title="快捷键"
         groupKey="settings:keymap"
         testId="settings-group-keymap"
         storageKey={OPEN_GROUPS_KEY}
       >
-        <div className="v-settings__note" data-v="settings-keymap-pending">
-          快捷键说明将在下一步接入（键位数据已就绪，届时从键位表自动生成，不手抄）。
+        {/* 不手写表：直接遍历 keymap.KEY_BINDINGS（经 keymapView 分类 + 格式化） */}
+        {keyGroups.map((group) => (
+          <div className="v-settings__key-group" key={group.category} data-v={`settings-keys-${group.category}`}>
+            <div className="v-settings__key-title">
+              {group.label}
+              <span className="v-settings__key-count">{group.rows.length}</span>
+            </div>
+            {group.rows.map((row) => (
+              <div className="v-settings__key-row" key={row.id} data-v={`settings-key-${row.id}`}>
+                <span className="v-settings__key-label">{row.label}</span>
+                <span className="v-settings__caps">
+                  {row.caps.map((cap, index) => (
+                    <kbd className="v-settings__kbd" key={`${row.id}-${index}`}>
+                      {cap}
+                    </kbd>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className="v-settings__note" data-v="settings-keymap-note">
+          表格从键位表自动生成（改了快捷键这里会自动跟上）。
+          {platform === 'mac' ? '当前按 Mac 键位显示：⌘ / ⌥ / ⇧。' : '当前按 Windows 键位显示：Ctrl / Alt / Shift（Mac 上会自动换成 ⌘ / ⌥ / ⇧）。'}
         </div>
       </CollapsibleSection>
 

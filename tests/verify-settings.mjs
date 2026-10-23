@@ -431,6 +431,171 @@ try {
     cleared.theme === null || cleared.theme === 'default',
   );
 
+  // ================= S3：快捷键组（从键位表自动生成）=================
+  await click('[data-v="settings-group-keymap-toggle"]');
+  await sleep(500);
+  const keymapUi = JSON.parse(
+    await page.session.evaluate(`(() => {
+      const groups = [...document.querySelectorAll('[data-v^="settings-keys-"]')];
+      const caps = (id) => [...document.querySelectorAll('[data-v="settings-key-' + id + '"] .v-settings__kbd')].map((el) => (el.textContent || '').trim());
+      return JSON.stringify({
+        order: groups.map((el) => (el.getAttribute('data-v') || '').replace('settings-keys-', '')),
+        titles: groups.map((el) => (el.querySelector('.v-settings__key-title')?.textContent || '').replace(/[0-9]+/g, '').trim()),
+        rows: document.querySelectorAll('.v-settings__key-row').length,
+        redo: caps('redo'),
+        del: caps('deleteClip'),
+        play: caps('togglePlay'),
+        back: caps('stepBack'),
+      });
+    })()`),
+  );
+  report.check(
+    `⑭ 快捷键四类齐全、顺序正确（${keymapUi.order.join(' / ')} → ${keymapUi.titles.join(' / ')}）`,
+    keymapUi.order.join(',') === 'playback,edit,view,global' &&
+      keymapUi.titles.join('/') === '播放控制/编辑操作/视图调整/全局功能',
+  );
+  report.check(
+    `⑭b 键位表里的 17 条全部列出（实测 ${keymapUi.rows} 行）`,
+    // 17 = keymap.KEY_BINDINGS 的条数。加快捷键时这里会红，是故意的：
+    // 逼你确认"新键位真的进了说明页"（单测那边已断言分类覆盖 17 条）。
+    keymapUi.rows === 17,
+  );
+  report.check(
+    `⑭c 修饰键随平台显示（撤销 = ${keymapUi.redo.join(' + ')}）`,
+    keymapUi.redo.join('+') === 'Ctrl+Shift+Z',
+  );
+  report.check(
+    `⑭d 多键同义只显示第一个（删除 = ${keymapUi.del.join(' + ')}）`,
+    keymapUi.del.length === 1 && keymapUi.del[0] === 'Delete',
+  );
+  report.check(
+    `⑭e 特殊键显示名（播放 = ${keymapUi.play.join('')} / 后退 = ${keymapUi.back.join('')}）`,
+    keymapUi.play.join('') === '空格' && keymapUi.back.join('') === '←',
+  );
+  await screenshot('settings-5-keymap.png');
+  await click('[data-v="settings-group-keymap-toggle"]');
+  await sleep(200);
+
+  // ================= S4：默认素材时长 + 两处接线 =================
+  const editingOpenNow = await page.session.evaluate(
+    `document.querySelector('[data-v="settings-group-editing"]')?.getAttribute('data-open')`,
+  );
+  if (editingOpenNow !== 'true') await click('[data-v="settings-group-editing-toggle"]');
+  await sleep(300);
+
+  /** 拖滑块（input 事件）+ 松手（pointerup）——与 verify-adjust 同一套写法。 */
+  const dragRange = async (selector, value) => {
+    await page.session.evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (el === null) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(el, '${value}');
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(350);
+  };
+
+  const fpsMilli = JSON.parse(await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.projectMeta())')).fpsMilli;
+  const framesOf = (seconds) => Math.round((seconds * fpsMilli) / 1000);
+  const textClips = async () =>
+    JSON.parse(
+      await page.session.evaluate(
+        `JSON.stringify(window.__VEDITOR_TEST__.clips().filter((clip) => clip.assetId === '').map((clip) => ({ id: clip.id, start: clip.startFrame, duration: clip.durationFrames })))`,
+      ),
+    );
+
+  const secondsDefault = await page.session.evaluate(
+    `document.querySelector('[data-v="settings-clip-seconds"]')?.value`,
+  );
+  report.check(`⑮ 清空数据后默认时长回到 3 秒（实测 ${secondsDefault}）`, String(secondsDefault) === '3');
+
+  // ---- ⑮b 改成 5 秒：写进偏好，且新建文字片段立刻是 5 秒 ----
+  await dragRange('[data-v="settings-clip-seconds"]', '5');
+  const prefsFive = JSON.parse(await readStorage('veditor:prefs'));
+  report.check(
+    `⑮b 改到 5 秒后写入偏好（prefs.defaultClipSeconds=${prefsFive.defaultClipSeconds}）`,
+    prefsFive.defaultClipSeconds === 5,
+  );
+
+  await page.session.evaluate('window.__VEDITOR_TEST__.seek(0)');
+  await click('[data-v="left-tab-text"]');
+  await sleep(400);
+  await click('[data-v="text-preset"]');
+  await sleep(700);
+  const clipsAfterFive = await textClips();
+  const firstText = clipsAfterFive[clipsAfterFive.length - 1];
+  report.check(
+    `⑮c 文本面板加文字 → 5 秒 = ${framesOf(5)} 帧（实测 ${firstText?.duration}）`,
+    firstText !== undefined && Math.abs(firstText.duration - framesOf(5)) <= 1,
+  );
+
+  // ---- ⑮d 改成 2 秒：已有片段不变，新片段变 ----
+  await click('[data-v="left-tab-settings"]');
+  await sleep(300);
+  await dragRange('[data-v="settings-clip-seconds"]', '2');
+  const prefsTwo = JSON.parse(await readStorage('veditor:prefs'));
+  // 截图早点拍：此刻还在「设置」Tab 上，能同时看到吸附 + 默认时长两个控件
+  await screenshot('settings-6-editing.png');
+  await click('[data-v="left-tab-text"]');
+  await sleep(300);
+
+  // 第二处接线：把模板拖到时间线第 400 帧（走 planForTextDrop）
+  const dropPoint = JSON.parse(
+    await page.session.evaluate(`(() => {
+      const canvas = document.querySelector('[data-v="timeline-canvas"]');
+      const layout = window.__VEDITOR_TEST__.timelineLayout();
+      const row = layout.rows.find((item) => item.kind === 'text');
+      if (!canvas || !row) return JSON.stringify(null);
+      const rect = canvas.getBoundingClientRect();
+      const scrollX = Number(canvas.dataset['scrollX'] ?? '0');
+      const zoom = window.__VEDITOR_TEST__.zoomLevel();
+      return JSON.stringify({ x: rect.left + layout.headerWidth + 400 * zoom - scrollX, y: rect.top + row.top + row.height / 2 });
+    })()`),
+  );
+  const dropResult = JSON.parse(
+    await page.session.evaluate(`(() => {
+      const canvas = document.querySelector('[data-v="timeline-canvas"]');
+      const card = document.querySelector('[data-v="text-preset"]');
+      const dt = new DataTransfer();
+      const make = (type, target) => {
+        const event = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: ${dropPoint?.x ?? 0}, clientY: ${dropPoint?.y ?? 0} });
+        target.dispatchEvent(event);
+        return event;
+      };
+      if (card) make('dragstart', card);
+      make('dragover', canvas);
+      make('drop', canvas);
+      return JSON.stringify({ ok: true });
+    })()`),
+  );
+  await sleep(700);
+  const clipsAfterTwo = await textClips();
+  const dropped = clipsAfterTwo.find((clip) => Math.abs(clip.start - 400) <= 2);
+  report.check(
+    `⑮d 拖模板落轨也读同一个偏好 → 2 秒 = ${framesOf(2)} 帧（实测 ${dropped?.duration ?? '没有落点片段'}，drop=${dropResult.ok}）`,
+    prefsTwo.defaultClipSeconds === 2 && dropped !== undefined && Math.abs(dropped.duration - framesOf(2)) <= 1,
+  );
+  report.check(
+    `⑮e 已有片段不受影响（5 秒那条仍是 ${firstText?.duration} 帧）`,
+    clipsAfterTwo.some((clip) => clip.id === firstText?.id && clip.duration === firstText?.duration),
+  );
+
+  // ---- ⑮f 刷新后仍是 2 秒（偏好持久化）----
+  await reload('验证默认时长持久化');
+  await click('[data-v="left-tab-settings"]');
+  const editingOpenAfter = await page.session.evaluate(
+    `document.querySelector('[data-v="settings-group-editing"]')?.getAttribute('data-open')`,
+  );
+  if (editingOpenAfter !== 'true') await click('[data-v="settings-group-editing-toggle"]');
+  await sleep(350);
+  const secondsReloaded = await page.session.evaluate(
+    `document.querySelector('[data-v="settings-clip-seconds"]')?.value`,
+  );
+  report.check(`⑮f 刷新后默认时长仍是 2 秒（实测 ${secondsReloaded}）`, String(secondsReloaded) === '2');
+
+
   // ---- ⑬ 全程无错误条 ----
   const errors = JSON.parse(await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.errors())'));
   report.check(`⑬ 全程没有错误条（${errors.length} 条）`, errors.length === 0);

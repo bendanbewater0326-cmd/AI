@@ -292,3 +292,51 @@ S2 需求里写的是"浅色 / 深色二态"，但代码里的事实是：
 |---|---|---|
 | S3 | 快捷键组（分类 + `<kbd>`）| 数据层 `keymapView` 已就绪、有 16 条单测，只差接线与 E2E |
 | S4 | 编辑偏好里的「默认素材时长」+ 接线两处（文本面板加文字、拖图片/贴纸落轨）| `prefs.defaultClipSeconds` 已就绪，未接线 |
+
+---
+
+## 11. S3 + S4 落地记录（2026-10-23 夜）
+
+**设置面板五组全部可用，S1–S4 收官。**
+
+### S3：快捷键组
+
+- 面板直接遍历 `keymap.KEY_BINDINGS`（经 `keymapView.groupBindings(detectPlatform())`），
+  四分类 + `<kbd>` 键帽，**不手写表**：以后改键位，说明页自动跟上。
+- 平台自适应：Mac 出 `⌘ / ⌥ / ⇧`，Windows 出 `Ctrl / Alt / Shift`，底部一行说明当前按哪套显示。
+- 分类标题右侧带条数（5 / 6 / 1 / 5），一眼看出"这一类几条"。
+- E2E ⑭–⑭e：四类顺序、17 条全列、修饰键、多键同义只显示第一个（Delete 而不是 Delete / Backspace）、
+  特殊键显示名（空格 / ←）。
+
+### S4：默认素材时长
+
+| 项 | 做法 |
+|---|---|
+| UI | 复用 `AdjustRow`（滑块 + 数值框），0.5–60 秒、步进 0.5、默认 3 |
+| 存储 | `localStorage['veditor:prefs']` 的 `defaultClipSeconds`（S1 已建好）|
+| 读取点 | **`core/prefs.defaultClipSeconds()` —— 新增的唯一入口** |
+| 删除 | `TEXT_CLIP_SECONDS` 常量（3 处引用全部改掉）|
+| 接线 | 文本面板点模板 / 工具栏「文字」/ 拖模板到时间线（`planForTextDrop`）|
+
+**为什么删常量而不是让它去读偏好**：留一个"名义上是 3 秒"的常量，后人一定会以为它还是唯一来源；
+函数名 `defaultClipSeconds()` 本身就说明"这是读出来的偏好"。
+
+**只影响新建**：该函数只在创建片段时调用，已有片段的 `durationFrames` 不动（E2E ⑮e 断言）。
+
+### 一个顺带发现的真问题：单测写了，但没进回归网
+
+`tests/settings.test.mjs`（S1 写的 17 条）**从来没被加进 `npm test` 的脚本列表**：
+单跑是绿的，"699 条全绿"里其实一次都没跑过它。
+
+已补进 `package.json` → 现在 **41 脚本 / 716 条**。
+
+> 这是项目里记过的"数据层有、界面没接"的测试版：**代码写了，但没被回归覆盖**。
+> 判据：新增 `tests/*.test.mjs` 后，`npm test` 的总条数必须变多；不变就是没接上。
+
+### 验收（实测）
+
+- `verify-settings` **34/34**（原 22 + S3 的 7 条断言 + S4 的 5 条断言）
+- `npm test` **716 条 / 41 脚本**全绿
+- 全量 E2E 64 个脚本：见 `.workbuddy/memory/2026-10-23.md` 收尾记录
+- 构建 `main.js` **725.1 KB**（+2.9KB）、`main.css` 50.8 KB
+- 截图：`settings-5-keymap.png`（四类 17 条）、`settings-6-editing.png`（吸附 + 默认时长）

@@ -87,7 +87,8 @@ import {
   readTextDrag,
   readTransitionDrag,
 } from './dnd';
-import { TEXT_CLIP_SECONDS, presetToText, textPresetById } from '../core/textPresets';
+import { presetToText, textPresetById } from '../core/textPresets';
+import { defaultClipSeconds } from '../core/prefs';
 import { transitionPresetById } from '../core/transitionPresets';
 import { buildTransitionOps, clipAtFrame, resolveDuration, resolveTransitionTarget, snapToSeam } from '../core/transitionTarget';
 import { effectPresetById } from '../core/effectPresets';
@@ -555,13 +556,13 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
    * 用户拖到哪条轨都一样，只有横向的帧号生效。所以这里不看 `target.track`，
    * 只取 `target.frame`。
    *
-   * 与点击新建共用 `ensureTextTrackOps` + `TEXT_CLIP_SECONDS`，
+   * 与点击新建共用 `ensureTextTrackOps` + `prefs.defaultClipSeconds()`，
    * 保证"拖进来"和"点一下"得到的东西完全一样。
    */
   function planForTextDrop(presetId: string, frame: number): TextDropPlan {
     const preset = textPresetById(presetId);
     if (preset === null) return { message: '模板不存在' };    const docNow = store.getDoc();
-    const durationFrames = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, docNow.fpsMilli));
+    const durationFrames = Math.max(1, secondsToFrames(defaultClipSeconds(), docNow.fpsMilli));
     const placement = ensureTextTrackOps(docNow, frame, durationFrames);
     const clip = createClip({
       assetId: '',
@@ -1123,7 +1124,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
   function addText(): void {
     const docNow = store.getDoc();
     const start = store.getPlayheadFrame();
-    const duration = Math.max(1, secondsToFrames(TEXT_CLIP_SECONDS, docNow.fpsMilli));
+    const duration = Math.max(1, secondsToFrames(defaultClipSeconds(), docNow.fpsMilli));
     const placement = ensureTextTrackOps(docNow, start, duration);
     const clip = createClip({
       assetId: '',

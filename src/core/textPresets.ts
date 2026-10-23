@@ -24,12 +24,12 @@ import { createTextContent } from './types';
 export type TextCategory = 'title' | 'caption' | 'label' | 'quote';
 
 /**
- * 新建文字片段的默认时长（秒）。
+ * 新建文字片段的默认时长（秒）不再是一个常量 —— S4 把它做成了**用户偏好**。
  *
- * 手动新建（面板 / 工具栏「文字」/ 拖拽）共用这一个常量 ——
- * 三处各写一个 3 迟早会变成 3 / 3 / 5，用户会觉得"同一个操作时长不一样"。
+ * 唯一的读取点是 `core/prefs.defaultClipSeconds()`：
+ * 手动新建的四个入口（面板点模板 / 工具栏「文字」/ 拖预设到时间线 / 拖到时间线以外）
+ * 都调它，不要在这里或业务代码里再写死一个 3。
  */
-export const TEXT_CLIP_SECONDS = 3;
 
 export interface TextPreset {
   id: string;

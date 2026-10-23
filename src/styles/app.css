@@ -3943,3 +3943,11 @@ body.v-caption-tl-dragging * {
   align-items: center;
   gap: 3px;
 }
+
+/* 快捷键分类标题右侧的条数（一眼看出"这一类有几条"，也方便对照键位表） */
+.v-settings__key-count {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--v-fg-dim);
+  font-variant-numeric: tabular-nums;
+}

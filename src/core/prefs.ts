@@ -73,6 +73,17 @@ export function readPrefs(): Prefs {
   };
 }
 
+/**
+ * 新建片段的默认时长（秒）—— **唯一的读取点**。
+ *
+ * 文字/贴纸的四个新建入口（文本面板点模板、工具栏「文字」、拖预设到时间线、
+ * 拖到时间线以外）全部调它。不要在业务代码里直接 `readPrefs().defaultClipSeconds`：
+ * 那样一旦要加兜底或夹取逻辑，就会出现第二份实现。
+ */
+export function defaultClipSeconds(): number {
+  return readPrefs().defaultClipSeconds;
+}
+
 /** 写偏好（局部更新，返回写入后的完整值）。写失败静默降级（隐私模式下 localStorage 会抛）。 */
 export function writePrefs(patch: Partial<Prefs>): Prefs {
   const next: Prefs = { ...readPrefs(), ...patch };
