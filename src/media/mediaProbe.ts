@@ -29,6 +29,7 @@ import { framesPerSecond } from '../core/timebase';
 import type { BlobLike, Mp4ProbeResult } from './demuxMp4';
 import { openMp4, readBlobBytes, readSample } from './demuxMp4';
 import type { WebmProbeResult } from './demuxWebm';
+import { openMp3 } from './demuxMp3';
 import { openWav } from './demuxWav';
 import { openWebm } from './demuxWebm';
 
@@ -331,6 +332,40 @@ export async function probeAsset(file: ProbeFile, options: ProbeOptions = {}): P
         probe: webmProbe,
         durationSec: webmDurationSec,
       },
+    };
+  }
+  if (container === 'mp3') {
+    const opened = await openMp3(file);
+    if (!opened.ok) return { ok: false, error: opened.error };
+    // 与 WAV 同款收窄（container 'mp3' 不在 MediaProbeResult 联合里，core/types 零改动）
+    const mp3Probe = opened.value as unknown as Mp4ProbeResult;
+    const mp3Fps: MilliFps = mp3Probe.fpsMilli === null ? DEFAULT_FPS_MILLI : mp3Probe.fpsMilli;
+    const asset = createAsset({
+      ...(options.id === undefined ? {} : { id: options.id }),
+      name: file.name,
+      kind: 'audio',
+      handleRef: null,
+      sourceMode: 'memory',
+      status: 'memory',
+      fpsMilli: mp3Fps,
+      durationFrames: mp3Probe.durationFrames,
+      durationSec: mp3Probe.durationSec,
+      ...(mp3Probe.sampleRate === null ? {} : { sampleRate: mp3Probe.sampleRate }),
+      ...(mp3Probe.channels === null ? {} : { channels: mp3Probe.channels }),
+      width: 0,
+      height: 0,
+      hasAudio: true,
+      thumbnailRef: null,
+      container: 'unknown',
+      codecVideo: null,
+      codecAudio: mp3Probe.audioCodec,
+      rotation: 0,
+      exactSeek: true,
+      hashKey: `${file.name}|${file.size}|${file.lastModified ?? 0}`,
+    });
+    return {
+      ok: true,
+      value: { asset, thumbnail: null, probe: mp3Probe, durationSec: mp3Probe.durationSec },
     };
   }
   if (container === 'wav') {

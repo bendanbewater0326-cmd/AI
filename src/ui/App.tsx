@@ -141,6 +141,8 @@ interface VeditorTestHooks {
     contentHash?: string | null;
     /** 本地草稿缓存里的文件名（null = 没缓存）。 */
     cacheKey?: string | null;
+    /** 音频编码（mp4a.40.2 / mp3 / pcm-s16…；纯音频导入断言用）。 */
+    codecAudio?: string | null;
   }>;
   /** 工程元信息（R-054 迁入/导出比对用）。 */
   projectMeta: () => { name: string; width: number; height: number; fpsMilli: number };
@@ -1155,6 +1157,8 @@ if (
           hasAudio: asset.hasAudio,
           sampleRate: asset.sampleRate,
           channels: asset.channels,
+          // 音频编码（纯音频导入断言用；实测「钩子字段裁剪过一次就再也读不到」）
+          codecAudio: asset.codecAudio,
         })),
       projectMeta: () => {
         const doc = store.getDoc();

@@ -1,6 +1,9 @@
-# MP3/WAV 纯音频导入支持方案（摸底完成，待拍板）
+# MP3/WAV 纯音频导入支持方案（已交付，2026-10-24：W1 WAV + W2 MP3 + W3 测试收尾）
 
 > 摸底日期：2026-10-24。缘起：音频面板摸底时确认**导入管线只认 mp4/webm 容器**，
+> **踩坑**：CDP 修饰键位 Shift=8（W1 同款）；MP3 的 LAME encoder padding 使 2s 素材实测
+> 2.0667s（62 帧），断言必须用 ffprobe 实测而非整秒假设；`assets()` 钩子补 `codecAudio`
+> 字段（钩子字段裁剪过一次就再也读不到的同款教训）。
 > 用户自有 WAV/MP3 无法导入（`mediaProbe.sniffContainer` 直接 `E_UNSUPPORTED_CONTAINER`）。
 > 本专项 = 补齐这两个纯音频容器，**混音/调度/导出核心零改动**。
 

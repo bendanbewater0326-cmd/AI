@@ -83,6 +83,7 @@ const report = createReport();
 const ev = async (expression) => page.session.evaluate(expression);
 const evalJson = async (expression) => JSON.parse(await ev(`JSON.stringify(${expression})`));
 const clips = async () => evalJson('window.__VEDITOR_TEST__.clips()');
+const assets = async () => evalJson('window.__VEDITOR_TEST__.assets()');
 const click = async (selector) => {
   await ev(`document.querySelector(${JSON.stringify(selector)})?.click()`);
   await sleep(300);
@@ -189,6 +190,46 @@ try {
     await exportWavTo(outFile);
     assertExportDuration(outFile, wavSec);
     report.check(`④ 导出 WAV 时长 ±1s（ffprobe 实测通过）`, true);
+  }
+
+  // ---- ④b MP3 导入全链路（W2）：导入 / 上轨 / 播放调度 / 导出 ----
+  {
+    assert(fs.existsSync(FIXTURE_MP3), '缺 sample-440-2s.mp3');
+    await dropFile(FIXTURE_MP3, 'sample-440-2s.mp3');
+    await page.session.waitFor(`window.__VEDITOR_TEST__.assets().length === 2`, 10000);
+    const mp3Asset = (await assets())[1];
+    report.check(
+      `④b MP3 导入：kind=${mp3Asset.kind} codecAudio=${mp3Asset.codecAudio}`,
+      mp3Asset.kind === 'audio' && mp3Asset.codecAudio === 'mp3',
+    );
+    // 双击上音轨（第二段接到现有片段之后）
+    await ev(`document.querySelectorAll('[data-v="asset-card"]')[1].dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); true`);
+    await page.session.waitFor(`window.__VEDITOR_TEST__.clips().length === 2`, 8000);
+    await sleep(400);
+    const mp3Clip = (await clips()).find((item) => item.assetId === mp3Asset.id);
+    const mp3Sec = wavDurationSec(FIXTURE_MP3); // ffprobe 实测（LAME 有 encoder padding，≠2s 整）
+    report.check(
+      `④b MP3 上音轨：时长 ${mp3Clip?.durationFrames} 帧 ≈ ${Math.round(mp3Sec * 30)}（实测 ${mp3Sec.toFixed(3)}s）`,
+      mp3Clip !== undefined && Math.abs(mp3Clip.durationFrames - Math.round(mp3Sec * 30)) <= 2,
+    );
+    // 播放压过 MP3 片段（seek 到第二段起点）
+    const mp3Start = mp3Clip.startFrame;
+    await ev(`window.__VEDITOR_TEST__.seek(${mp3Start})`);
+    await sleep(200);
+    await ev(`window.__VEDITOR_TEST__.play()`);
+    await sleep(1600);
+    await ev(`window.__VEDITOR_TEST__.pause()`);
+    const mp3Stats = await evalJson('window.__VEDITOR_TEST__.audioStats()');
+    report.check(
+      `④b MP3 播放调度：chunks>0、gaps=0（${JSON.stringify(mp3Stats)}）`,
+      mp3Stats !== null && mp3Stats.chunks > 0 && mp3Stats.gaps === 0,
+    );
+    // 导出整段 → WAV 时长 = 工程时长（各片段 end 的最大值，由 doc 实测）
+    const docFrames = (await clips()).reduce((max, item) => Math.max(max, item.startFrame + item.durationFrames), 0);
+    const outFile = path.join(DOWNLOAD_DIR, `exported-mp3-${Date.now()}.wav`);
+    await exportWavTo(outFile);
+    assertExportDuration(outFile, docFrames / 30);
+    report.check(`④b 导出含 MP3 的工程：时长 ≈ ${(docFrames / 30).toFixed(2)}s（ffprobe 实测通过）`, true);
   }
 
   // ---- ⑤ 非 PCM 的 .wav（ADPCM）→ 中文可读拒绝，不崩 ----
