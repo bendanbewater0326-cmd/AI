@@ -26,9 +26,9 @@
 | 维度 | 实测值 | 复现 |
 |---|---|---|
 | 源码 | **105 个 ts/tsx / 3.3 万行**（108 文件含 app.css） | `Get-ChildItem -Recurse src -Include *.ts,*.tsx` |
-| 单测 | **744 条 / 43 脚本全绿** | `npm test` |
-| E2E | **70 个 `verify-*.mjs`**（全量 70/70，约 16 分钟） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建 | `main.js` **881.1KB**（含 10 个内联音效）+ `main.css` 54.8KB | `npm run build` |
+| 单测 | **768 条 / 45 脚本全绿** | `npm test` |
+| E2E | **71 个 `verify-*.mjs`**（全量 71/71，约 18 分钟） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建 | `main.js` **889.2KB**（含 10 个内联音效）+ `main.css` 54.8KB | `npm run build` |
 | 时基守卫 | **114 文件 0 违规** | `npm run check` |
 | git | 工作区干净、**28 提交**（领先 origin 18）、`.git` 20.6M | `git status --short` |
 
