@@ -30,6 +30,10 @@ import type {
   Track,
 } from '../core/types';
 import { createId, createTrack } from '../core/types';
+import { buildNewTextOps } from '../core/textClip';
+import { buildEffectOps } from '../core/effectTarget';
+import { createTextContent } from '../core/types';
+import type { ColorGrade } from '../render/compositor';
 
 /** 允许 AI 使用的属性路径（白名单，越界即拒绝）。 */
 export type AIPropertyPath =
@@ -50,6 +54,17 @@ export type AIIntent =
   | { kind: 'addTrack'; trackKind: 'video' | 'audio'; name?: string }
   | { kind: 'muteTrack'; trackId: string; muted: boolean }
   | { kind: 'suggestCut'; frame: Frame; label: string }
+  /**
+   * AI 文案（2026-10-24，面板场景化）：模型只给**文案文本**（内容与 transcribe 的文本
+   * 同性质），建轨/落片/时长/撤销由编译器落地（复用 core/textClip.buildNewTextOps——
+   * 与文本面板/右键菜单同一个定义点）。
+   */
+  | { kind: 'addTextClip'; content: string }
+  /**
+   * AI 风格调色：按**文字描述**生成的调色参数（模型看不到画面，上下文不含素材字节）。
+   * 编译复用 core/effectTarget.buildEffectOps——与特效面板/属性栏同一套 effect 构造。
+   */
+  | { kind: 'setGrade'; clipId?: string; grade: ColorGrade }
   /**
    * R-060 智能粗剪：去掉长停顿。
    *
@@ -77,6 +92,39 @@ export interface CompileFailure {
 export type CompileResult = CompileSuccess | CompileFailure;
 
 const BLEND_MODES = new Set(['normal', 'overlay', 'screen', 'multiply']);
+
+/** AI 文案长度上限（与手动输入的实用上限一致；超出直接拒绝而不是截断——截断的文案没有意义）。 */
+export const MAX_AI_TEXT_LENGTH = 200;
+
+/** 播放头（意图编译时从 doc 读；AIIntent 不携带，防模型编造）。 */
+function playheadOf(doc: Project): Frame {
+  return Math.max(0, doc.playheadFrame);
+}
+
+/** 调色目标：显式 clipId 优先，否则播放头处的视频片段，再退到第一段视频片段。 */
+function gradeTargetOf(doc: Project): Clip | null {
+  const videoClips = doc.tracks
+    .filter((track) => track.kind === 'video')
+    .flatMap((track) => track.clips)
+    .filter((clip) => clip.text === null || clip.text === undefined)
+    .sort((left, right) => Math.abs(left.startFrame - doc.playheadFrame) - Math.abs(right.startFrame - doc.playheadFrame));
+  return videoClips[0] ?? null;
+}
+
+/** 调色参数 clamp（与属性栏滑块同一范围：−100..100——超范围参数一律截断，不留第二套规则）。 */
+function clampGrade(grade: ColorGrade): ColorGrade {
+  const clamp = (value: unknown): number => {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(-100, Math.min(100, Math.round(parsed)));
+  };
+  return {
+    brightness: clamp(grade.brightness),
+    contrast: clamp(grade.contrast),
+    saturation: clamp(grade.saturation),
+    temperature: clamp(grade.temperature),
+  };
+}
 
 function findClip(doc: Project, clipId: string): Clip | null {
   for (const track of doc.tracks) {
@@ -403,6 +451,41 @@ function compileOne(doc: Project, intent: AIIntent): CompileResult | null {
       return compileTrim(doc, intent);
     case 'setProperty':
       return compileSetProperty(doc, intent);
+    case 'addTextClip': {
+      // 与手动新建完全同一条规则：长度校验、时长偏好、建轨+落片一个撤销步
+      const content = intent.content.trim();
+      if (content === '') return { ok: false, error: '文案内容为空' };
+      if (content.length > MAX_AI_TEXT_LENGTH) {
+        return { ok: false, error: `文案过长（${content.length} 字，上限 ${MAX_AI_TEXT_LENGTH}）` };
+      }
+      const playhead = playheadOf(doc);
+      const plan = buildNewTextOps(doc, playhead, createTextContent({ content }));
+      return {
+        ok: true,
+        ops: [...plan.ops],
+        marks: [],
+        summary: `AI 文案（${content.slice(0, 12)}${content.length > 12 ? '…' : ''}）`,
+        notes: [],
+      };
+    }
+    case 'setGrade': {
+      const clip = intent.clipId === undefined ? gradeTargetOf(doc) : findClip(doc, intent.clipId);
+      if (clip === null) return { ok: false, error: '没有可调色的视频片段' };
+      if (clip.text !== null && clip.text !== undefined) {
+        return { ok: false, error: '文字片段不能调色' };
+      }
+      // 与手动调节完全同一套 clamp（−100..100）+ effect 构造（buildEffectOps）
+      const grade = clampGrade(intent.grade);
+      const ops = buildEffectOps(clip, {
+        id: 'ai-grade',
+        name: 'AI 风格调色',
+        category: 'style',
+        hint: 'AI 按文字描述生成的调色参数',
+        params: grade,
+      });
+      if (ops.length === 0) return null; // 参数没变，不发无用撤销步
+      return { ok: true, ops, marks: [], summary: 'AI 风格调色', notes: [] };
+    }
     case 'addTrack': {
       const sameKind = doc.tracks.filter((track) => track.kind === intent.trackKind);
       const defaultName =

@@ -77,6 +77,8 @@ export const SYSTEM_PROMPT = `你是视频剪辑助手，把用户的一句话�
    - {"kind":"addTrack","trackKind":"video|audio","name":"可选"}
    - {"kind":"muteTrack","trackId":"...","muted":true}
    - {"kind":"suggestCut","frame":120,"label":"建议理由"}
+   - {"kind":"addTextClip","content":"生成的文案文本（不超过 200 字）"}
+   - {"kind":"setGrade","clipId":"可选，缺省=选中的视频片段","grade":{"brightness":-100..100,"contrast":0,"saturation":0,"temperature":0}}
 4. 只能引用上下文里真实存在的 clipId / trackId，不得编造。
 5. 如果用户是在提问（为什么/怎么/建议），intents 里只放 suggestCut 或不放，message 给出理由。
 6. 如果无法完成，intents 为空数组，message 说明原因。`;
@@ -105,6 +107,8 @@ const INTENT_KINDS = new Set([
   'addTrack',
   'muteTrack',
   'suggestCut',
+  'addTextClip',
+  'setGrade',
 ]);
 
 const PROPERTY_PATHS = new Set<AIPropertyPath>([
@@ -247,6 +251,39 @@ export function normalizeIntents(raw: unknown): { intents: AIIntent[]; dropped: 
           });
         break;
       }
+      case 'addTextClip': {
+        const content = value['content'];
+        if (typeof content !== 'string' || content.trim() === '') dropped.push('addTextClip 缺少 content');
+        else intents.push({ kind: 'addTextClip', content });
+        break;
+      }
+      case 'setGrade': {
+        const raw = value['grade'];
+        const grade =
+          typeof raw === 'object' && raw !== null
+            ? raw as Record<string, unknown>
+            : undefined;
+        if (grade === undefined) dropped.push('setGrade 缺少 grade');
+        else {
+          // 越界/非数值由编译器 clamp（同一套规则，normalize 只做形状校验）
+          const numOr0 = (key: string): number => {
+            const item = grade[key];
+            const parsed = typeof item === 'number' ? item : Number(item);
+            return Number.isFinite(parsed) ? parsed : 0;
+          };
+          intents.push({
+            kind: 'setGrade',
+            ...(clipId === undefined ? {} : { clipId }),
+            grade: {
+              brightness: numOr0('brightness'),
+              contrast: numOr0('contrast'),
+              saturation: numOr0('saturation'),
+              temperature: numOr0('temperature'),
+            },
+          });
+        }
+        break;
+      }
       default:
         dropped.push(`未处理意图 ${kind}`);
     }
@@ -302,6 +339,24 @@ export function createHostProvider(port: AIModelPort, label = '宿主模型'): A
 }
 
 /* ---------------- 离线规则引擎（mock） ---------------- */
+
+/** 离线演示文案（固定内容保证 E2E 可断言；宿主模型接入后自然被真文案替代）。 */
+const DEMO_COPY: Record<string, string> = {
+  种草: '（离线演示）这个镜头一秒种草，好物就该这样拍。',
+  科普: '（离线演示）三分钟看懂一个原理，收藏起来慢慢看。',
+  悬念: '（离线演示）注意看，接下来发生的事出乎意料。',
+  治愈: '（离线演示）把日子过成喜欢的样子，从这一帧开始。',
+  通用: '（离线演示）记录此刻，画面会替你说话。',
+};
+
+/** 风格词 → 调色参数（离线规则；参数与特效预设同一量纲 −100..100）。 */
+function styleGradeFromPhrase(text: string): { label: string; params: { brightness: number; contrast: number; saturation: number; temperature: number } } {
+  if (/复古|胶片/.test(text)) return { label: '复古胶片感', params: { brightness: -8, contrast: 18, saturation: -14, temperature: 26 } };
+  if (/冷色|电影感/.test(text)) return { label: '电影感冷色', params: { brightness: -12, contrast: 22, saturation: -8, temperature: -30 } };
+  if (/暖色|暖阳/.test(text)) return { label: '暖阳', params: { brightness: 10, contrast: 8, saturation: 14, temperature: 30 } };
+  if (/夏日|清爽/.test(text)) return { label: '清爽夏日', params: { brightness: 14, contrast: 12, saturation: 22, temperature: -8 } };
+  return { label: '风格调色', params: { brightness: 4, contrast: 12, saturation: 8, temperature: 0 } };
+}
 
 function firstEditableClip(doc: Project, selectedClipId: string | null) {
   if (selectedClipId !== null) {
@@ -368,6 +423,28 @@ export function createMockProvider(): AIProvider {
         return fail(makeError('E_DECODE_FAILED', '时间线上还没有片段，先导入素材', 'mock'));
       }
       const clipEnd = clip.startFrame + clip.durationFrames;
+
+      // AI 文案（面板场景化入口走这里；规则引擎给固定演示文案——真文案需要宿主模型）
+      if (/文案|标题|解说词|开场白|写一句|生成.*文字/.test(text)) {
+        const style = /种草|安利/.test(text) ? '种草'
+          : /科普|知识/.test(text) ? '科普'
+          : /悬念|开场/.test(text) ? '悬念'
+          : /温情|治愈/.test(text) ? '治愈'
+          : '通用';
+        return ok({
+          message: `（离线演示）已生成${style}风格文案`,
+          intents: [{ kind: 'addTextClip', content: DEMO_COPY[style] ?? DEMO_COPY['通用'] ?? '' }],
+        });
+      }
+
+      // AI 风格调色（规则引擎：风格词 → 固定参数组合；真模型可给任意组合）
+      if (/调色|色调|滤镜感|复古|胶片|冷色|暖色|夏日|电影感/.test(text)) {
+        const grade = styleGradeFromPhrase(text);
+        return ok({
+          message: `（离线演示）已应用${grade.label}`,
+          intents: [{ kind: 'setGrade', ...(request.selectedClipId === null ? {} : { clipId: request.selectedClipId }), grade: grade.params }],
+        });
+      }
 
       // 静音某条轨道
       const muteMatch = /(静音|取消静音)\s*(V\d+|A\d+|视频轨|音轨)/i.exec(text);

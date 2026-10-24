@@ -912,6 +912,153 @@ body.v-splitter-dragging--y {
   gap: 8px;
 }
 
+/* ---------- AI 风格调色行（特效面板场景化入口；形态与文本面板 AI 行一致） ---------- */
+
+.v-effectpanel__airow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.v-effectpanel__aibtn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+  border: 0.5px solid var(--v-accent);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.v-effectpanel__aibtn:disabled {
+  color: var(--v-fg-dim);
+  border-color: var(--v-border);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.v-effectpanel__aiinput {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface);
+  color: var(--v-fg);
+}
+
+.v-effectpanel__aigo {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--v-accent);
+  border: 0;
+  border-radius: var(--v-radius);
+  cursor: pointer;
+}
+
+.v-effectpanel__aigo:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.v-effectpanel__aicancel {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+/* ---------- AI 文案行（文本面板场景化入口） ---------- */
+
+.v-textpanel__airow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.v-textpanel__aibtn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--v-accent);
+  background: var(--v-accent-weak);
+  border: 0.5px solid var(--v-accent);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.v-textpanel__aibtn:disabled {
+  color: var(--v-fg-dim);
+  border-color: var(--v-border);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.v-textpanel__aiinput {
+  flex: 1 1 120px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-surface);
+  color: var(--v-fg);
+}
+
+.v-textpanel__aichips {
+  display: flex;
+  gap: 4px;
+}
+
+.v-textpanel__aichip {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: transparent;
+  border: 0.5px solid var(--v-border);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.v-textpanel__aigo {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: #fff;
+  background: var(--v-accent);
+  border: 0;
+  border-radius: var(--v-radius);
+  cursor: pointer;
+}
+
+.v-textpanel__aigo:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.v-textpanel__aicancel {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
 /* 分类 chips：横向可滚（15% 窄栏时 5 个 chip 放不下一行） */
 .v-textpanel__cats {
   flex: 0 0 auto;
@@ -3575,6 +3722,34 @@ body.v-track-dragging .v-track-head {
   font-size: 11px;
   line-height: 1.7;
   color: var(--v-fg-dim);
+}
+
+.v-caption-empty__presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.v-caption-preset {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--v-fg);
+  background: var(--v-surface);
+  border: 0.5px solid var(--v-accent);
+  border-radius: 13px;
+  cursor: pointer;
+}
+
+.v-caption-preset:hover {
+  background: var(--v-accent-weak);
+}
+
+.v-caption-preset:disabled {
+  color: var(--v-fg-dim);
+  border-color: var(--v-border);
+  cursor: not-allowed;
 }
 
 .v-caption-empty__actions {

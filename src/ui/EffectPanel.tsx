@@ -40,6 +40,8 @@ import { store, useDoc, useSelection } from '../core/store';
 import { applyGradeToPixels } from '../render/grade';
 import { getThumbnail } from '../persist/autosave';
 import { clearDraggingEffect, setEffectDrag } from './dnd';
+import { runPanelAI } from '../ai/panelFlow';
+import { isAIUsable } from '../ai/registry';
 
 /** 缩略图分辨率（16:9）。14 张卡 × 96×54 一共 7 万像素，逐像素调色毫无压力。 */
 const THUMB_W = 96;
@@ -226,6 +228,42 @@ export function EffectPanel(): ReactElement {
     store.dispatch(ops, isOriginalPreset(preset) ? '移除画面特效' : `应用画面特效（${preset.name}）`);
   }
 
+  /* ---------- AI 风格调色（2026-10-24 面板场景化）：模型按文字描述给调色参数，
+   * 落地走 setGrade 意图编译（与手动调色同一套 effect 构造与 clamp）。
+   * 诚实边界：基于文字描述生成参数，不上传画面内容。 ---------- */
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiStyle, setAiStyle] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const aiUsable = isAIUsable();
+
+  async function applyAIGrade(): Promise<void> {
+    const style = aiStyle.trim();
+    if (style === '' || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const doc = store.getDoc();
+      const plan = await runPanelAI({
+        text: style,
+        instruction: `按风格描述调色：${style}（目标：选中的视频片段，参数范围 −100..100）`,
+        doc,
+        selectedClipId: store.getSelectedClipId(),
+        playheadFrame: doc.playheadFrame,
+      });
+      if (!plan.ok) {
+        store.pushError(plan.error);
+        return;
+      }
+      store.dispatch(plan.value.ops, plan.value.summary, 'ai');
+      // 选中落点片段：「已应用」高亮跟着选中走（与点击应用同一套表现）
+      const op = plan.value.ops.find((item) => item.op === 'setClipEffect');
+      if (op !== undefined && op.op === 'setClipEffect') store.setSelectedClipId(op.clipId);
+      setAiOpen(false);
+      setAiStyle('');
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   return (
     <div className="v-effectpanel" data-v="effect-panel">
       {/* 分类筛选：只影响本地状态，不写 localStorage（免得"上次选了风格、这次找不到原片"） */}
@@ -243,6 +281,62 @@ export function EffectPanel(): ReactElement {
             {item.label}
           </button>
         ))}
+      </div>
+
+      {/*
+        AI 风格调色（面板场景化入口）：基于文字描述生成调色参数，不上传画面内容；
+        无模型时禁用并说明（对齐字幕面板的转写禁用先例）。
+      */}
+      <div className="v-effectpanel__airow" data-v="effect-ai-row">
+        {aiOpen ? (
+          <>
+            <input
+              className="v-effectpanel__aiinput"
+              data-v="effect-ai-style"
+              placeholder="风格描述，例如：复古胶片 / 清爽夏日 / 电影感冷色"
+              value={aiStyle}
+              maxLength={40}
+              autoFocus
+              aria-label="调色风格描述"
+              onChange={(event) => setAiStyle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void applyAIGrade();
+                if (event.key === 'Escape') setAiOpen(false);
+              }}
+            />
+            <button
+              type="button"
+              className="v-effectpanel__aigo"
+              data-v="effect-ai-apply"
+              disabled={aiBusy || aiStyle.trim() === ''}
+              onClick={() => void applyAIGrade()}
+            >
+              {aiBusy ? '应用中…' : '应用'}
+            </button>
+            <button
+              type="button"
+              className="v-effectpanel__aicancel"
+              data-v="effect-ai-cancel"
+              onClick={() => setAiOpen(false)}
+              aria-label="收起 AI 调色"
+            >
+              收起
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="v-effectpanel__aibtn"
+            data-v="effect-ai-open"
+            disabled={!aiUsable}
+            title={aiUsable
+              ? '基于文字描述生成调色参数，不上传画面内容'
+              : '当前客户端未提供模型'}
+            onClick={() => setAiOpen(true)}
+          >
+            ✦ AI 风格调色
+          </button>
+        )}
       </div>
 
       <div className="v-effectpanel__grid" data-v="effect-grid" data-count={visible.length}>

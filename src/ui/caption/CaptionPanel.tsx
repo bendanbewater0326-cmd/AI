@@ -218,10 +218,14 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
     }
   }
 
-  async function onGenerate(): Promise<void> {
+  /**
+   * 生成字幕。语言：'auto'（工具条按钮）/ 'zh' / 'en'（空状态预设直达——
+   * 语言判定本来就在 `parseTranscribeRequest` 里，这里只是给用户一条不用输入的捷径）。
+   */
+  async function onGenerate(language: 'auto' | 'zh' | 'en' = 'auto'): Promise<void> {
     setBusy(true);
     try {
-      const result = await generateCaptions('auto');
+      const result = await generateCaptions(language);
       if (result !== null) {
         const droppedNote = result.dropped > 0 ? `，丢弃 ${result.dropped} 条无效片段` : '';
         flash(`已生成 ${result.count} 条字幕${droppedNote}`);
@@ -255,7 +259,7 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
         data-v="caption-generate"
         disabled={busy || !transcribeReady}
         title={transcribeReady ? '根据音频自动识别并生成字幕' : '当前客户端未提供语音识别通道'}
-        onClick={() => void onGenerate()}
+        onClick={() => void onGenerate('auto')}
       >
         AI 生成字幕
       </button>
@@ -295,6 +299,42 @@ export function CaptionPanel(props: CaptionPanelProps): ReactElement {
           <div className="v-caption-empty__title">还没有字幕</div>
           <div className="v-caption-empty__hint">
             导入一份 SRT，或者让 AI 听写音频。字幕会落在<strong>文字轨</strong>上，与手动添加的文字同轨。
+          </div>
+          {/*
+            三个预设入口（2026-10-24 场景化）：语言直达 + SRT——用户不用输入任何指令。
+            无转写通道时中文/英文给可读拒绝（generateCaptions 内部已处理），SRT 永远可用。
+          */}
+          <div className="v-caption-empty__presets" data-v="caption-presets">
+            <button
+              type="button"
+              className="v-caption-preset"
+              data-v="caption-preset-zh"
+              disabled={busy || !transcribeReady}
+              title={transcribeReady ? '识别中文语音并生成字幕' : '当前客户端未提供语音识别通道'}
+              onClick={() => void onGenerate('zh')}
+            >
+              识别中文语音
+            </button>
+            <button
+              type="button"
+              className="v-caption-preset"
+              data-v="caption-preset-en"
+              disabled={busy || !transcribeReady}
+              title={transcribeReady ? '识别英文语音并生成字幕' : '当前客户端未提供语音识别通道'}
+              onClick={() => void onGenerate('en')}
+            >
+              识别英文语音
+            </button>
+            <button
+              type="button"
+              className="v-caption-preset"
+              data-v="caption-preset-srt"
+              disabled={busy}
+              title="导入 .srt 字幕文件"
+              onClick={() => fileRef.current?.click()}
+            >
+              导入 SRT
+            </button>
           </div>
           <div className="v-caption-empty__actions">{entryButtons}</div>
           {transcribeReady ? null : (

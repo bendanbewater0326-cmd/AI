@@ -33,6 +33,8 @@ import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { createTextContent, makeError } from '../core/types';
 import { buildNewTextOps } from './textClip';
+import { runPanelAI } from '../ai/panelFlow';
+import { isAIUsable } from '../ai/registry';
 import type { TextContent } from '../core/types';
 import { TEXT_CATEGORIES, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
 import type { TextCategory, TextPreset } from '../core/textPresets';
@@ -129,6 +131,43 @@ export function TextPanel(): ReactElement {
   }, []);
   const userPresets = presets.filter((preset) => preset.payload.textStyle !== undefined);
 
+  /* ---------- AI 文案（2026-10-24 面板场景化；模型只给文案文本，落地走 addTextClip 意图编译） ---------- */
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const aiUsable = isAIUsable();
+
+  /** 风格预设 chips（点击填入主题词，省一次输入）。 */
+  const AI_COPY_STYLES = ['种草安利', '知识科普', '悬念开场', '温情治愈'] as const;
+
+  async function generateCopy(): Promise<void> {
+    const topic = aiTopic.trim();
+    if (topic === '' || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const doc = store.getDoc();
+      const plan = await runPanelAI({
+        text: topic,
+        instruction: `生成一条视频文案：${topic}（落在播放头处，建轨与落片由客户端完成）`,
+        doc,
+        selectedClipId: store.getSelectedClipId(),
+        playheadFrame: store.getPlayheadFrame(),
+      });
+      if (!plan.ok) {
+        store.pushError(plan.error);
+        return;
+      }
+      store.dispatch(plan.value.ops, plan.value.summary, 'ai');
+      // 选中刚落的文字片段：属性栏立刻可改内容/样式（与手动添加同一套后续）
+      const added = plan.value.ops.find((op) => op.op === 'addClip');
+      if (added !== undefined && added.op === 'addClip') store.setSelectedClipId(added.clip.id);
+      setAiOpen(false);
+      setAiTopic('');
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   /** 在播放头新建一段文字（落文字轨；建轨与落片同批提交 = 一个撤销步）。 */
   function createText(text: TextContent, label: string): void {
     const plan = buildNewTextOps(store.getDoc(), store.getPlayheadFrame(), text);
@@ -221,6 +260,73 @@ export function TextPanel(): ReactElement {
             {item.label}
           </button>
         ))}
+      </div>
+
+      {/*
+        AI 文案（面板场景化入口）：无模型时禁用并说明（对齐字幕面板的转写禁用先例）；
+        mock 离线演示可用（返回固定演示文案）。
+      */}
+      <div className="v-textpanel__airow" data-v="text-ai-row">
+        {aiOpen ? (
+          <>
+            <input
+              className="v-textpanel__aiinput"
+              data-v="text-ai-topic"
+              placeholder="文案主题，例如：周末露营的一天"
+              value={aiTopic}
+              maxLength={60}
+              autoFocus
+              aria-label="文案主题"
+              onChange={(event) => setAiTopic(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void generateCopy();
+                if (event.key === 'Escape') setAiOpen(false);
+              }}
+            />
+            <div className="v-textpanel__aichips" role="group" aria-label="文案风格">
+              {AI_COPY_STYLES.map((style) => (
+                <button
+                  key={style}
+                  type="button"
+                  className="v-textpanel__aichip"
+                  data-v={`text-ai-style-${style}`}
+                  onClick={() => setAiTopic(`${aiTopic.trim()} ${style}`.trim())}
+                >
+                  {style}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="v-textpanel__aigo"
+              data-v="text-ai-generate"
+              disabled={aiBusy || aiTopic.trim() === ''}
+              onClick={() => void generateCopy()}
+            >
+              {aiBusy ? '生成中…' : '生成'}
+            </button>
+            <button
+              type="button"
+              className="v-textpanel__aicancel"
+              data-v="text-ai-cancel"
+              onClick={() => setAiOpen(false)}
+              aria-label="收起 AI 文案"
+            >
+              收起
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="v-textpanel__aibtn"
+            data-v="text-ai-open"
+            disabled={!aiUsable}
+            title={aiUsable ? '按主题生成一条文案，落在播放头处的文字轨' : '当前客户端未提供模型'}
+            onClick={() => setAiOpen(true)}
+          >
+            ✦ AI 文案
+          </button>
+        )}
       </div>
 
       <div className="v-textpanel__body" data-v="text-body">
