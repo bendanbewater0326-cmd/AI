@@ -18,6 +18,7 @@ import { splitAtPlayhead } from '../core/keymap';
 import { ExportDialog } from './ExportDialog';
 import { SelfCheckPanel } from './SelfCheck';
 import { CacheDialog } from './CacheDialog';
+import { shortcutHint } from './settings/keymapView';
 import { BackupDialog } from './BackupDialog';
 import { getAIProvider, isAIUsable } from '../ai/registry';
 import { parseProjectFile, projectFileName, serializeProjectFile } from '../persist/projectFile';
@@ -304,7 +305,7 @@ async function importProjectFile(file: File): Promise<void> {
           className="v-topbar__tool"
           data-v="undo"
           disabled={!canUndo}
-          title="撤销（Ctrl+Z）"
+          title={`撤销（${shortcutHint("undo")}）`}
           aria-label="撤销"
           onClick={() => store.undo()}
         >
@@ -315,7 +316,7 @@ async function importProjectFile(file: File): Promise<void> {
           className="v-topbar__tool"
           data-v="redo"
           disabled={!canRedo}
-          title="重做（Ctrl+Shift+Z）"
+          title={`重做（${shortcutHint("redo")}）`}
           aria-label="重做"
           onClick={() => store.redo()}
         >
@@ -325,7 +326,7 @@ async function importProjectFile(file: File): Promise<void> {
           type="button"
           className="v-topbar__tool"
           data-v="split"
-          title="在播放头处分割（B）"
+          title={`在播放头处分割（${shortcutHint("splitAtPlayhead")}）`}
           aria-label="分割"
           onClick={() => {
             const count = splitAtPlayhead(store);
@@ -489,7 +490,7 @@ async function importProjectFile(file: File): Promise<void> {
         disabled={!isAIUsable()}
         title={
           isAIUsable()
-            ? `AI 命令栏（Ctrl/Cmd+K）· ${getAIProvider().label}`
+            ? `AI 命令栏（${shortcutHint("ai")}）· ${getAIProvider().label}`
             : '当前客户端未提供模型'
         }
         onClick={() => window.dispatchEvent(new CustomEvent('veditor:ai'))}
@@ -499,7 +500,7 @@ async function importProjectFile(file: File): Promise<void> {
       <button
         type="button"
         data-v="export-open"
-        title="导出（Ctrl/Cmd+E）"
+        title={`导出（${shortcutHint("export")}）`}
         onClick={() => setExportOpen(true)}
         disabled={derived.durationFrames === 0}
       >

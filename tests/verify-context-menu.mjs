@@ -88,7 +88,7 @@ const menuLabels = async () =>
   evalJson(`(() => {
     const menu = document.querySelector('[data-v="context-menu"]');
     if (menu === null) return null;
-    return Array.from(menu.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent.trim());
+    return Array.from(menu.querySelectorAll('[role="menuitem"]')).map((item) => (item.querySelector('.v-menu__item-label') ?? item).textContent.trim());
   })()`);
 
 /** 片段中心的画布 CSS 坐标（右键打在片段上用）。 */

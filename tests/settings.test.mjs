@@ -200,6 +200,25 @@ test('行的 id / label / caps 齐全（面板要直接用）', () => {
   }
 });
 
+/* ---------------- ③ shortcutHint（按钮/菜单快捷键提示的唯一来源） ---------------- */
+
+console.log('③ shortcutHint');
+
+test('undo → Ctrl+Z（win）/ ⌘Z（mac）', () => {
+  eq(keymapView.shortcutHint('undo', 'win'), 'Ctrl+Z', 'win');
+  eq(keymapView.shortcutHint('undo', 'mac'), '⌘Z', 'mac');
+});
+
+test('波纹删除 → Shift+Delete（多键同义只显示第一个）', () => {
+  eq(keymapView.shortcutHint('rippleDelete', 'win'), 'Shift+Delete', 'win');
+});
+
+test('keymap 里没有的动作返回 null（不手写文案）', () => {
+  eq(keymapView.shortcutHint('escape', 'win') !== null, true, 'escape 有');
+  const unknown = keymapView.shortcutHint('not-an-action', 'win');
+  eq(unknown, null, '未知动作');
+});
+
 /* ---------------- 汇总 ---------------- */
 
 console.log('');

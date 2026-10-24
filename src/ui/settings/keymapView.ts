@@ -19,7 +19,7 @@
  * - 多键同义（`delete` / `backspace`）**只显示第一个**：显示 "Delete / Backspace"
  *   会让每行变长，而信息量是零（两个键做同一件事）
  */
-import { KEY_BINDINGS } from '../../core/keymap';
+import { detectPlatform, KEY_BINDINGS } from '../../core/keymap';
 import type { KeyBinding, Platform } from '../../core/keymap';
 
 export type KeyCategory = 'playback' | 'edit' | 'view' | 'global';
@@ -90,6 +90,20 @@ function keyLabel(key: string): string {
  * // win: ['Ctrl', 'Shift', 'Z']；mac: ['⌘', 'Shift', 'Z']
  * formatBindingKeys(redoBinding, 'other');
  */
+/**
+ * 某个动作的快捷键提示文案（如 `Ctrl+Z`）；keymap 里没有的动作返回 null。
+ *
+ * 按钮悬浮提示/右键菜单的快捷键角标**都从这里取**——手写文案一定会和 keymap 漂移
+ * （设置面板 S1 的同一设计理由：说明页就是遍历 KEY_BINDINGS 生成的）。
+ */
+export function shortcutHint(id: KeyBinding['id'], platform: Platform = detectPlatform()): string | null {
+  const binding = KEY_BINDINGS.find((item) => item.id === id);
+  if (binding === undefined) return null;
+  // win 用 `Ctrl+Shift+Z` 连接；mac 惯例是符号连写（⌘⇧Z，⌘ 和键之间不加 +）
+  const caps = formatBindingKeys(binding, platform);
+  return platform === 'mac' ? caps.join('') : caps.join('+');
+}
+
 export function formatBindingKeys(binding: KeyBinding, platform: Platform): string[] {
   const caps: string[] = [];
   if (binding.primary === true) caps.push(platform === 'mac' ? '⌘' : 'Ctrl');

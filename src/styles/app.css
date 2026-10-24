@@ -3020,7 +3020,10 @@ body.v-track-dragging .v-track-head {
 }
 
 .v-menu__item {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
   padding: 6px 10px;
   border: 0;
@@ -3030,6 +3033,13 @@ body.v-track-dragging .v-track-head {
   font-size: 12px;
   color: var(--v-fg);
   cursor: pointer;
+}
+
+/* 菜单项右侧的快捷键角标（文案来自 keymapView.shortcutHint，不手写） */
+.v-menu__shortcut {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .v-menu__item:hover {

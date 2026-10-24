@@ -14,6 +14,8 @@ import type { ReactElement } from 'react';
 
 export interface ContextMenuAction {
   label: string;
+  /** 快捷键提示（右对齐灰字，如 `B` / `Shift+Delete`）——文案来自 keymapView.shortcutHint，不手写。 */
+  shortcut?: string;
   /** 危险操作（删除）用红色。 */
   danger?: boolean;
   /** 当前不可用（例如"分离音频"用在没有声音的片段上）——置灰但仍显示，并说明原因。 */
@@ -141,7 +143,10 @@ export function ContextMenu({
               onClose();
             }}
           >
-            {item.label}
+            <span className="v-menu__item-label">{item.label}</span>
+            {'shortcut' in item && item.shortcut !== undefined ? (
+              <span className="v-menu__shortcut">{item.shortcut}</span>
+            ) : null}
           </button>
         );
       })}

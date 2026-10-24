@@ -39,6 +39,7 @@ import type { AudioScheduler } from '../media/audioEngine';
 import { attachAutosave, restoreSession } from '../persist/autosave';
 import { isBackupDue, latestBackup, writeBackup, writeExitBackup } from '../persist/backup';
 import { db as veditorDb } from '../persist/db';
+import { shortcutHint } from './settings/keymapView';
 import { probeMediaFile } from '../media/importPipeline';
 import { relinkAssetFromFile } from '../media/relink';
 import { autoRestoreFromDirectories, restoreFromCache, restoreFromHostPaths } from '../media/autoRestore';
@@ -563,7 +564,7 @@ function PreviewStage({ playing, onToggle, onSeek, frame, volume, onVolume, canv
             <button
               type="button"
               data-v="frame-prev"
-              title="上一帧（←）"
+              title={`上一帧（${shortcutHint("stepBack")}）`}
               aria-label="上一帧"
               onClick={() => onSeek(Math.max(0, frame - 1))}
             >
@@ -572,7 +573,7 @@ function PreviewStage({ playing, onToggle, onSeek, frame, volume, onVolume, canv
             <button
               type="button"
               data-v="play-toggle"
-              title={playing ? '暂停（空格）' : '播放（空格）'}
+              title={`${playing ? '暂停' : '播放'}（${shortcutHint('togglePlay')}）`}
               aria-label={playing ? '暂停' : '播放'}
               aria-pressed={playing}
               onClick={onToggle}
@@ -582,7 +583,7 @@ function PreviewStage({ playing, onToggle, onSeek, frame, volume, onVolume, canv
             <button
               type="button"
               data-v="frame-next"
-              title="下一帧（→）"
+              title={`下一帧（${shortcutHint("stepForward")}）`}
               aria-label="下一帧"
               onClick={() => onSeek(frame + 1)}
             >

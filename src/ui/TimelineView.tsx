@@ -99,6 +99,7 @@ import { effectPresetById } from '../core/effectPresets';
 import { buildSplitOperations, removeSelectedClip, rippleDeleteSelectedClip } from '../core/keymap';
 import { clipKindOf } from './clipKind';
 import { buildNewTextOps } from './textClip';
+import { shortcutHint } from './settings/keymapView';
 import { buildEffectOps, resolveEffectTarget } from '../core/effectTarget';
 import { ensureSfxAsset, sfxPresetById } from './audio/sfxLibrary';
 
@@ -1075,12 +1076,14 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
           },
           {
             label: `波纹删除${suffix}`,
+            shortcut: shortcutHint('rippleDelete') ?? undefined,
             onSelect: () => {
               rippleDeleteSelectedClip(store);
             },
           },
           {
             label: `删除${suffix}`,
+            shortcut: shortcutHint('deleteClip') ?? undefined,
             danger: true,
             onSelect: () => {
               removeSelectedClip(store);
@@ -1105,6 +1108,7 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
         // **分割 = 点哪切哪**：切割位置是右键点击的时间坐标，不是播放头。
         // 与 B 键/顶栏分割按钮同一套 buildSplitOperations（边界校验都在那一个定义点）
         label: splitInside ? '分割' : '分割（点击位置不在片段内）',
+        shortcut: shortcutHint('splitAtPlayhead') ?? undefined,
         ...(splitInside ? {} : { disabled: true }),
         onSelect: () => {
           const ops = buildSplitOperations(store.getDoc(), hit.frame, clip.id);
@@ -1247,12 +1251,14 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
       {
         // 波纹删除（Shift+Delete 同款）：删除后同轨后续片段左移，一个撤销步
         label: '波纹删除',
+        shortcut: shortcutHint('rippleDelete') ?? undefined,
         onSelect: () => {
           rippleDeleteSelectedClip(store);
         },
       },
       {
         label: '删除片段',
+        shortcut: shortcutHint('deleteClip') ?? undefined,
         danger: true,
         // 复用键盘 Delete 的批量路径（removeSelectedClip）：单选时删这一段，
         // 行为与文案一致；这里恒为单选（多选分支在上面提前返回）
