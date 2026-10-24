@@ -20,6 +20,8 @@ import { SelfCheckPanel } from './SelfCheck';
 import { CacheDialog } from './CacheDialog';
 import { shortcutHint } from './settings/keymapView';
 import { BackupDialog } from './BackupDialog';
+import { buildVedpack, openVedpack, vedpackFileName, vedpackProjectText, VEDPACK_CONFIRM_BYTES } from '../persist/vedpack';
+import { relinkAssetFromFile } from '../media/relink';
 import { getAIProvider, isAIUsable } from '../ai/registry';
 import { parseProjectFile, projectFileName, serializeProjectFile } from '../persist/projectFile';
 import { resetPreviewSources } from '../media/previewSource';
@@ -93,6 +95,7 @@ export function TopBar({ buildId = '' }: { buildId?: string } = {}): ReactElemen
   const canRedo = store.canRedo();
   const [theme, setThemeState] = useState(getTheme());
   const projectFileRef = useRef<HTMLInputElement | null>(null);
+  const packFileRef = useRef<HTMLInputElement | null>(null);
   /** 字幕文件选择（R-059）。 */
   const subtitleInputRef = useRef<HTMLInputElement | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -226,6 +229,89 @@ function exportProjectFile(): void {
  * 必须先 `resetPreviewSources()`：旧的素材源/代理还挂在注册表与引擎里，
  * 不清的话新工程会"借用"旧素材的字节——看起来能播，其实播的是上一个工程的内容。
  */
+async function exportVedpackFile(): Promise<void> {
+  const doc = store.getDoc();
+  store.setBusy('正在收集素材…');
+  try {
+    const build = await buildVedpack(doc);
+    if (!build.ok) {
+      store.pushError(build.error);
+      return;
+    }
+    // >500MB 二次确认（用户拍板：预估大小 + 耗时/内存预期）
+    if (build.value.totalBytes > VEDPACK_CONFIRM_BYTES) {
+      const sizeGb = (build.value.totalBytes / 1024 / 1024 / 1024).toFixed(2);
+      const confirmed = window.confirm(
+        `包体较大（约 ${sizeGb}GB），打包预计需要较长时间，且会占用较多内存。
+继续导出吗？`,
+      );
+      if (!confirmed) return;
+    }
+    const url = URL.createObjectURL(build.value.blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = vedpackFileName(doc);
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    // 用户拍板：完成提示带成功/缺失统计，缺失引导重链
+    if (build.value.missingNames.length > 0) {
+      store.pushError(
+        makeError(
+          'E_INVALID_PROJECT',
+          `已导出工程包，${build.value.missingNames.length} 个素材未能打包（${build.value.missingNames.join('、')}），导入后可重新链接`,
+        ),
+      );
+    }
+  } finally {
+    store.setBusy(null);
+  }
+}
+
+async function importVedpackFile(file: File): Promise<void> {
+  store.setBusy('正在打开工程包…');
+  try {
+    const opened = await openVedpack(file);
+    if (!opened.ok) {
+      store.pushError(opened.error);
+      return;
+    }
+    const text = await vedpackProjectText(file);
+    if (!text.ok) {
+      store.pushError(text.error);
+      return;
+    }
+    const parsed = parseProjectFile(text.value);
+    if (!parsed.ok) {
+      store.pushError(parsed.error);
+      return;
+    }
+    // 与 .vedproj 同一条载入路：先清源再整份替换
+    resetPreviewSources();
+    store.replaceDoc(parsed.value);
+    // 逐素材绑回字节（restoreFromCache 同一条 relink 路，按 assetId 直绑）
+    let restored = 0;
+    for (const [assetId, bytes] of opened.value.files) {
+      const result = await relinkAssetFromFile({ assetId, file: bytes });
+      if (result.ok) restored += 1;
+    }
+    const totalAssets = parsed.value.assets.length;
+    const missing = totalAssets - restored;
+    if (missing > 0) {
+      store.pushError(
+        makeError(
+          'E_INVALID_PROJECT',
+          `工程已恢复：${restored}/${totalAssets} 个素材就绪，${missing} 个缺失（右键素材可重新链接）`,
+        ),
+      );
+    }
+  } finally {
+    store.setBusy(null);
+  }
+}
+
 async function importProjectFile(file: File): Promise<void> {
   let text = '';
   try {
@@ -376,6 +462,17 @@ async function importProjectFile(file: File): Promise<void> {
             </button>
             <button
               type="button"
+              data-v="project-export-pack"
+              role="menuitem"
+              onClick={() => {
+                setProjectMenuOpen(false);
+                void exportVedpackFile();
+              }}
+            >
+              导出工程包…（含素材）
+            </button>
+            <button
+              type="button"
               data-v="project-import"
               role="menuitem"
               onClick={() => {
@@ -384,6 +481,17 @@ async function importProjectFile(file: File): Promise<void> {
               }}
             >
               导入工程文件…
+            </button>
+            <button
+              type="button"
+              data-v="project-import-pack"
+              role="menuitem"
+              onClick={() => {
+                setProjectMenuOpen(false);
+                packFileRef.current?.click();
+              }}
+            >
+              导入工程包…
             </button>
             <button
               type="button"
@@ -479,6 +587,18 @@ async function importProjectFile(file: File): Promise<void> {
           const file = event.target.files?.[0];
           event.target.value = '';
           if (file !== undefined) void importProjectFile(file);
+        }}
+      />
+      <input
+        ref={packFileRef}
+        type="file"
+        accept=".vedpack"
+        hidden
+        data-v="pack-file-input"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file !== undefined) void importVedpackFile(file);
         }}
       />
 

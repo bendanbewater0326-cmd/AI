@@ -181,3 +181,81 @@ export function createZip(entries: ZipEntry[], options: CreateZipOptions = {}): 
 
   return out;
 }
+
+/* ---------------- 解包（store-only，.vedpack 用） ---------------- */
+
+export interface UnzipEntry {
+  name: string;
+  data: Uint8Array;
+}
+
+export type UnzipResult =
+  | { ok: true; entries: Map<string, Uint8Array> }
+  | { ok: false; reason: 'not-zip' | 'unsupported' | 'corrupt'; message: string };
+
+/**
+ * 解开一个**全部条目为 store 模式**的 ZIP（`createZip` 的自产自销读侧）。
+ *
+ * 为什么只认 store：.vedpack 的素材（音视频）本身已压缩，deflate 无收益；
+ * 而支持解压就要带一份 inflate 实现（约几百行或引依赖）。外部普通 ZIP
+ * （deflate 条目）会得到 `unsupported`，调用方给可读中文提示。
+ *
+ * 逐条目校验 CRC32——store 条目的"完整性"就靠它（防下载损坏/手改）。
+ */
+export function unzipStore(bytes: Uint8Array): UnzipResult {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+
+  // ---- 1) 从尾部找 EOCD（End of Central Directory）----
+  // EOCD 固定 22 字节，但前面可能有最长 65535 字节的注释——从尾向前搜签名。
+  let eocd = -1;
+  const searchStart = Math.max(0, bytes.byteLength - 22 - 0xffff);
+  for (let i = bytes.byteLength - 22; i >= searchStart; i -= 1) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return { ok: false, reason: 'not-zip', message: '不是 ZIP 文件' };
+  const entryCount = view.getUint16(eocd + 10, true);
+  const centralOffset = view.getUint32(eocd + 16, true);
+
+  // ---- 2) 走中央目录：拿每个条目的名字 / 大小 / 本地头偏移 ----
+  const entries = new Map<string, Uint8Array>();
+  let cursor = centralOffset;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (cursor + 46 > bytes.byteLength || view.getUint32(cursor, true) !== 0x02014b50) {
+      return { ok: false, reason: 'corrupt', message: `ZIP 中央目录损坏（第 ${index} 条）` };
+    }
+    const method = view.getUint16(cursor + 10, true);
+    const crcExpected = view.getUint32(cursor + 16, true);
+    const size = view.getUint32(cursor + 24, true);
+    const nameLength = view.getUint16(cursor + 28, true);
+    const extraLength = view.getUint16(cursor + 30, true);
+    const commentLength = view.getUint16(cursor + 32, true);
+    const localOffset = view.getUint32(cursor + 42, true);
+    const name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
+    if (method !== 0) {
+      return { ok: false, reason: 'unsupported', message: `条目 ${name} 使用了压缩（非 store），不支持` };
+    }
+
+    // ---- 3) 本地文件头：跳过头 + 名字 + extra，取数据 ----
+    if (localOffset + 30 > bytes.byteLength || view.getUint32(localOffset, true) !== 0x04034b50) {
+      return { ok: false, reason: 'corrupt', message: `条目 ${name} 的本地头损坏` };
+    }
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    if (dataStart + size > bytes.byteLength) {
+      return { ok: false, reason: 'corrupt', message: `条目 ${name} 的数据不完整` };
+    }
+    const data = bytes.subarray(dataStart, dataStart + size);
+    if (crc32(data) !== crcExpected) {
+      return { ok: false, reason: 'corrupt', message: `条目 ${name} 校验失败（数据可能损坏）` };
+    }
+    entries.set(name, data);
+
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  return { ok: true, entries };
+}
