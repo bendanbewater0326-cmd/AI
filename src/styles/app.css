@@ -351,6 +351,46 @@ select:focus-visible,
   color: var(--v-error);
 }
 
+/* ---------- 时间线 S5 第二阶段浮层（框选/气泡/跨轨指示线） ---------- */
+
+.v-tl-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 框选矩形：主色描边 + 极淡填充（相交判定的可视范围） */
+.v-tl-marquee {
+  position: absolute;
+  border: 1px solid var(--v-accent);
+  background: var(--v-accent-weak);
+  pointer-events: none;
+}
+
+/* 跨轨指示线：画在目标轨上缘（横向贯穿内容区） */
+.v-tl-track-indicator {
+  position: absolute;
+  height: 2px;
+  background: var(--v-accent);
+  pointer-events: none;
+}
+
+/* 时长气泡：跟随指针，viewport 坐标（portal 到 body） */
+.v-tl-bubble {
+  position: fixed;
+  z-index: 60;
+  padding: 3px 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.78);
+  border-radius: var(--v-radius);
+  pointer-events: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- 历史版本（工程备份回退） ---------- */
 
 .v-backup__list {

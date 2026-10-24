@@ -347,6 +347,27 @@ export function buildTrimOperation(clip: Clip, from: TrimState, to: TrimState): 
   return { op: 'trimClip', clipId: clip.id, from, to };
 }
 
+/**
+ * 波纹裁剪（s5-audit B6，用户拍板：**只对右缘生效**）的位移构造：
+ * 同轨上、起点在**原片段终点**（含）之后的所有片段，按 `新时长 − 旧时长` 平移
+ * （剪短前移、加长后推）。被裁片段与后续之间的既有间隔是用户故意留的，不平移
+ * （与波纹删除"每个幸存片段前面的被删时长之和"同一语义口径）。
+ *
+ * 返回 `rippleShift` op（可空数组 = 没有后续片段）；与 `trimClip` 同批提交 = 一个撤销步。
+ */
+export function buildTrimRippleShifts(doc: Project, clip: Clip, newDurationFrames: Frame): ClipOperation[] {
+  const delta = newDurationFrames - clip.durationFrames;
+  if (delta === 0) return [];
+  const oldEnd = clip.startFrame + clip.durationFrames;
+  const track = doc.tracks.find((item) => item.id === clip.trackId);
+  if (track === undefined) return [];
+  const shifts = track.clips
+    .filter((item) => item.startFrame >= oldEnd)
+    .map((item) => ({ clipId: item.id, from: item.startFrame, to: item.startFrame + delta }));
+  if (shifts.length === 0) return [];
+  return [{ op: 'rippleShift', shifts }];
+}
+
 /* ================= 控制器（副作用层） ================= */
 
 export interface TimelineControllerDeps {
@@ -415,6 +436,8 @@ interface DragState {
   invalidReason: string | null;
   /** 本次拖动的 Alt 状态（"临时不吸附"）。松手重算落点要用同一个值。 */
   alt: boolean;
+  /** Shift 修饰键（仅右缘裁剪用：波纹裁剪，后续片段跟随平移）。 */
+  shift: boolean;
 }
 
 /**
@@ -424,7 +447,7 @@ interface DragState {
 export function createTimelineController(deps: TimelineControllerDeps) {
   let drag: DragState | null = null;
 
-  function pointerDown(x: number, y: number, modifiers: { additive?: boolean } = {}): void {
+  function pointerDown(x: number, y: number, modifiers: { additive?: boolean; shift?: boolean } = {}): void {
     const doc = deps.getDoc();
     const ephemeral = deps.getEphemeral();
     // **x 已经是内容坐标**（`TimelineView.laneX()` 里加过 scrollX）。
@@ -438,7 +461,7 @@ export function createTimelineController(deps: TimelineControllerDeps) {
         kind: 'scrub', clipId: null, trackId: null,
         startX: x, fromStart: hit.frame, fromTrackId: '',
         deltaFrames: 0, resolvedStart: null, resolvedTrackId: null,
-        snapLineFrame: null, valid: true, invalidReason: null, alt: false, pressFrame: hit.frame,
+        snapLineFrame: null, valid: true, invalidReason: null, alt: false, shift: modifiers.shift === true, pressFrame: hit.frame,
       };
       deps.seek(hit.frame, 'scrub');
       return;
@@ -453,7 +476,9 @@ export function createTimelineController(deps: TimelineControllerDeps) {
     }
 
     const clip = findClip(doc, hit.clipId);
-    if (clip === undefined) return;
+    if (clip === undefined) {
+      return;
+    }
 
     /**
      * **Ctrl / Cmd 点击 = 加选**，而且**不进入拖动**。
@@ -490,21 +515,22 @@ export function createTimelineController(deps: TimelineControllerDeps) {
     const kind = isLeftHandle ? 'trim-left' : isRightHandle ? 'trim-right' : 'move';
 
     drag = {
-      kind,
-      clipId: clip.id,
-      trackId: hit.trackId,
-      startX: x,
-      fromStart: clip.startFrame,
-      fromTrackId: clip.trackId,
-      deltaFrames: 0,
-      resolvedStart: clip.startFrame,
-      resolvedTrackId: clip.trackId,
-      snapLineFrame: null,
-      valid: true,
-      invalidReason: null,
-      alt: false,
-      pressFrame: hit.frame,
-    };
+        kind,
+        clipId: clip.id,
+        trackId: hit.trackId,
+        startX: x,
+        fromStart: clip.startFrame,
+        fromTrackId: clip.trackId,
+        deltaFrames: 0,
+        resolvedStart: clip.startFrame,
+        resolvedTrackId: clip.trackId,
+        snapLineFrame: null,
+        valid: true,
+        invalidReason: null,
+        alt: false,
+        shift: modifiers.shift === true,
+        pressFrame: hit.frame,
+      };
 
     if (kind === 'move') {
       // 立即进入拖动草稿（不 dispatch）
@@ -661,6 +687,13 @@ export function createTimelineController(deps: TimelineControllerDeps) {
       const { trimmed } = resolveTrimSnapped(doc, clip, handle, drag.deltaFrames, drag.alt);
       if (trimmed !== null && trimmed.durationFrames !== clip.durationFrames) {
         const from: TrimState = { inFrame: clip.inFrame, outFrame: clip.outFrame, startFrame: clip.startFrame, durationFrames: clip.durationFrames };
+        // **Shift + 右缘 = 波纹裁剪**（用户拍板：左缘 Shift 按普通裁剪处理）：
+        // trimClip + rippleShift 同批提交 = 一个撤销步，后续片段自动跟随
+        if (drag.shift === true && handle === 'right') {
+          const ripple = buildTrimRippleShifts(doc, clip, trimmed.durationFrames);
+          deps.commit([buildTrimOperation(clip, from, trimmed), ...ripple], '波纹裁剪');
+          return;
+        }
         deps.commit([buildTrimOperation(clip, from, trimmed)], '裁剪片段');
       }
     }

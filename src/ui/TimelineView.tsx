@@ -100,6 +100,7 @@ import { buildSplitOperations, removeSelectedClip, rippleDeleteSelectedClip } fr
 import { clipKindOf } from './clipKind';
 import { buildNewTextOps } from './textClip';
 import { shortcutHint } from './settings/keymapView';
+import { createPortal } from 'react-dom';
 import { buildEffectOps, resolveEffectTarget } from '../core/effectTarget';
 import { ensureSfxAsset, sfxPresetById } from './audio/sfxLibrary';
 
@@ -337,7 +338,10 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
         getDoc: () => store.getDoc(),
         getEphemeral: () => store.getEphemeral(),
         getScrollX: () => scrollXRef.current,
-        setDraft: (draft) => store.setDrag(draft),
+        setDraft: (draft) => {
+          store.setDrag(draft);
+          updateDragOverlays(draft);
+        },
         commit: (ops, label) => {
           store.setDrag(null);
           store.dispatch(ops, label);
@@ -350,6 +354,174 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
       });
     }
     return controllerRef.current;
+  }
+
+  /* ---------- S5 第二阶段：框选 / 时长气泡 / 跨轨指示线 / 边缘自动滚动 ----------
+   *
+   * 全部是 **DOM 浮层**（v-tl-overlay 内绝对定位 + 气泡 portal 到 body），
+   * 不碰 `render/timelinePainter`——canvas 上的 ghost/吸附线照旧由渲染层画。
+   * 框选期间不 dispatch（与拖拽事务同一条经验），松手才写选中集。
+   */
+  const marqueeRef = useRef<{
+    startX: number;
+    startY: number;
+    frameAtStart: number;
+    additive: boolean;
+    moved: boolean;
+  } | null>(null);
+  const marqueeEscRef = useRef<((event: KeyboardEvent) => void) | null>(null);
+  const lastClientRef = useRef<{ x: number; y: number } | null>(null);
+  const lastAltRef = useRef<boolean>(false);
+  const edgeScrollRef = useRef<number | null>(null);
+  const marqueeElRef = useRef<HTMLDivElement | null>(null);
+  const bubbleElRef = useRef<HTMLDivElement | null>(null);
+  const indicatorElRef = useRef<HTMLDivElement | null>(null);
+
+  /** 拖拽草稿变化时同步浮层：气泡文本/位置 + 跨轨指示线。 */
+  function updateDragOverlays(draft: import('../core/types').DragDraft | null): void {
+    const bubble = bubbleElRef.current;
+    const indicator = indicatorElRef.current;
+    if (draft === null) {
+      if (bubble !== null) bubble.hidden = true;
+      if (indicator !== null) indicator.hidden = true;
+      return;
+    }
+    const fps = store.getDoc().fpsMilli;
+    if (bubble !== null) {
+      const end = draft.startFrame + draft.durationFrames;
+      bubble.textContent =
+        draft.kind === 'move'
+          ? `起点 ${formatTimecode(draft.startFrame, fps)} · 结束 ${formatTimecode(end, fps)} · 时长 ${formatTimecode(draft.durationFrames, fps)}`
+          : `时长 ${formatTimecode(draft.durationFrames, fps)}`;
+      bubble.hidden = false;
+      const client = lastClientRef.current;
+      if (client !== null) {
+        bubble.style.left = `${Math.min(window.innerWidth - 280, client.x + 14)}px`;
+        bubble.style.top = `${Math.max(8, client.y - 40)}px`;
+      }
+    }
+    if (indicator !== null) {
+      // 跨轨指示线：只在移动且有效、目标轨 ≠ 原轨时出现（审计 B5）
+      let crossTop: number | null = null;
+      if (draft.kind === 'move' && draft.valid) {
+        const docNow = store.getDoc();
+        const draggedId = store.getSelectedClipId();
+        const dragged =
+          draggedId === null
+            ? undefined
+            : docNow.tracks.flatMap((track) => track.clips).find((item) => item.id === draggedId);
+        if (dragged !== undefined && dragged.trackId !== draft.trackId) {
+          const row = trackLayout(docNow).rows.find((item) => item.trackId === draft.trackId);
+          if (row !== undefined) crossTop = row.top;
+        }
+      }
+      if (crossTop === null) {
+        indicator.hidden = true;
+      } else {
+        indicator.hidden = false;
+        indicator.style.top = `${crossTop}px`;
+        indicator.style.left = `${TRACK_HEADER_WIDTH}px`;
+        indicator.style.width = `${Math.max(0, (canvasRef.current?.width ?? 0) - TRACK_HEADER_WIDTH)}px`;
+      }
+    }
+  }
+
+  /** 框选拖动中更新选框矩形（canvas 内部坐标 = v-tl-inner 坐标）。 */
+  function marqueeMoveTo(clientX: number, clientY: number): void {
+    const marquee = marqueeRef.current;
+    const el = marqueeElRef.current;
+    if (marquee === null || el === null) return;
+    const x = screenX({ clientX });
+    const y = screenY({ clientY });
+    if (!marquee.moved && Math.abs(x - marquee.startX) < 3 && Math.abs(y - marquee.startY) < 3) return;
+    marquee.moved = true;
+    el.hidden = false;
+    el.style.left = `${Math.min(marquee.startX, x)}px`;
+    el.style.top = `${Math.min(marquee.startY, y)}px`;
+    el.style.width = `${Math.abs(x - marquee.startX)}px`;
+    el.style.height = `${Math.abs(y - marquee.startY)}px`;
+  }
+
+  /** 框选松手：相交判定 → 选中集（Ctrl = 加选/减选）。 */
+  function endMarquee(cancelled: boolean, event: { clientX: number; clientY: number } | null): void {
+    const marquee = marqueeRef.current;
+    if (marquee === null) return;
+    const esc = marqueeEscRef.current;
+    if (esc !== null) window.removeEventListener('keydown', esc);
+    marqueeEscRef.current = null;
+    const el = marqueeElRef.current;
+    if (el !== null) el.hidden = true;
+    marqueeRef.current = null;
+    if (cancelled || !marquee.moved) {
+      // 单击空白：保持旧语义（清空选择 + 定位播放头）；Ctrl 单击空白不动选择
+      if (!cancelled && !marquee.moved && !marquee.additive) {
+        store.setSelectedClipId(null);
+        transport.seekTo(marquee.frameAtStart, 'exact');
+      }
+      return;
+    }
+    const doc = store.getDoc();
+    const x = screenX(event ?? { clientX: 0, clientY: 0 });
+    const y = screenY(event ?? { clientX: 0, clientY: 0 });
+    // 框的两端都换算成**时间坐标**（起点固定，终点随当前 scrollX）：
+    // 自动滚动改变视口后，起点仍在原时间位置（时间空间锚定，不是视口锚定）
+    const laneA = marquee.startX - TRACK_HEADER_WIDTH + scrollXRef.current;
+    const laneB = x - TRACK_HEADER_WIDTH + scrollXRef.current;
+    const laneLeft = Math.min(laneA, laneB);
+    const laneRight = Math.max(laneA, laneB);
+    const top = Math.min(marquee.startY, y);
+    const bottom = Math.max(marquee.startY, y);
+    const rows = trackLayout(doc).rows;
+    const intersecting: string[] = [];
+    for (const track of doc.tracks) {
+      const row = rows.find((item) => item.trackId === track.id);
+      if (row === undefined) continue;
+      if (row.top + row.height <= top || row.top >= bottom) continue;
+      for (const clip of track.clips) {
+        // **相交**判定（不是包含）：只压到片段一半也算选中（s5-audit B1）
+        if (clip.startFrame < laneRight && clip.startFrame + clip.durationFrames > laneLeft) {
+          intersecting.push(clip.id);
+        }
+      }
+    }
+    if (!marquee.additive) store.setSelectedClipId(null);
+    for (const id of intersecting) store.toggleSelection(id);
+    requestPaint();
+  }
+
+  /** 边缘自动滚动：拖动/框选中指针贴左右边缘 <40px 时持续滚动（横向 only，用户拍板）。 */
+  function edgeScrollStep(): void {
+    const client = lastClientRef.current;
+    const canvas = canvasRef.current;
+    const dragging = getController().drag !== null || marqueeRef.current !== null;
+    if (client === null || canvas === null || !dragging) {
+      edgeScrollRef.current = null;
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const zone = 40;
+    let direction = 0;
+    if (client.x - rect.left < zone) direction = -1;
+    else if (rect.right - client.x < zone) direction = 1;
+    if (direction === 0) {
+      edgeScrollRef.current = null;
+      return;
+    }
+    scrollXRef.current = Math.max(0, scrollXRef.current + direction * 12);
+    // 滚动后**重放同一坐标**：控制器每次重读 getScrollX()，落点自动跟上新视口
+    getController().pointerMove(
+      laneX({ clientX: client.x }),
+      screenY({ clientY: client.y }),
+      lastAltRef.current || !snapEnabled,
+    );
+    if (marqueeRef.current !== null) marqueeMoveTo(client.x, client.y);
+    requestPaint();
+    edgeScrollRef.current = requestAnimationFrame(edgeScrollStep);
+  }
+
+  function updateEdgeScroll(): void {
+    // 已有滚动循环在跑就不重复起（循环每帧重读指针位置，离开边缘自动退出）
+    if (edgeScrollRef.current === null) edgeScrollStep();
   }
 
   /* ---------- 订阅重绘（doc 通道 + 播放头总线 + 选中态） ---------- */
@@ -426,12 +598,35 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     // 轨道头：单击不改数据（双击才改名），避免误操作
     if (x < TRACK_HEADER_WIDTH && y >= RULER_HEIGHT) return;
     /**
+     * **空白处按下 = 框选**（s5-audit B1；用户拍板：只在空白触发，命中片段仍是拖动/裁剪）。
+     * 单击（没拖动）保留旧语义：清空选择 + 定位播放头（见 endMarquee）。
+     * Ctrl/Cmd 按住时是**加选/减选**框选：松手时对框内片段逐个 toggle。
+     */
+    if (event.button === 0) {
+      const hit0 = hitTest(doc, store.getEphemeral(), laneX(event), y);
+      if (hit0.clipId === null && hit0.zone !== 'ruler' && x >= TRACK_HEADER_WIDTH) {
+        marqueeRef.current = {
+          startX: x,
+          startY: y,
+          frameAtStart: hit0.frame,
+          additive: event.ctrlKey || event.metaKey,
+          moved: false,
+        };
+        const esc = (keyEvent: KeyboardEvent): void => {
+          if (keyEvent.key === 'Escape') endMarquee(true, null);
+        };
+        marqueeEscRef.current = esc;
+        window.addEventListener('keydown', esc);
+        return;
+      }
+    }
+    /**
      * `Ctrl / Cmd` 点击 = 加选（不进入拖动）。
      *
      * Mac 用 `metaKey`：只判 `ctrlKey` 的话 Mac 用户按 Cmd 加选会变成单选，
      * 而 Cmd 才是 Mac 的惯例键。
      */
-    getController().pointerDown(laneX(event), y, { additive: event.ctrlKey || event.metaKey });
+    getController().pointerDown(laneX(event), y, { additive: event.ctrlKey || event.metaKey, shift: event.shiftKey });
   }
   /**
    * 指针移动：拖动中交给 controller；**没在拖时更新悬停态与光标**。
@@ -441,11 +636,19 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
    * 光标是最便宜的可发现性提示（用户不用试就知道这里能不能拖、能不能裁）。
    */
   function onPointerMove(event: React.PointerEvent<HTMLCanvasElement>): void {
+    lastClientRef.current = { x: event.clientX, y: event.clientY };
+    lastAltRef.current = event.altKey;
+    if (marqueeRef.current !== null) {
+      marqueeMoveTo(event.clientX, event.clientY);
+      updateEdgeScroll();
+      return;
+    }
     const ctrl = getController();
     if (ctrl.drag !== null) {
       // `alt` 在 controller 里是"这次拖动不吸附"：按住 Alt 临时关，
       // 或者用户已经把吸附整体关掉（`snapEnabled === false`）——两者等价
       ctrl.pointerMove(laneX(event), screenY(event), event.altKey || !snapEnabled);
+      updateEdgeScroll();
       return;
     }
 
@@ -479,12 +682,29 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
    *    而 `canvas.style.cursor` 会一直停在 `grab`。
    */
   function onPointerLeave(): void {
+    endMarquee(true, null);
+    if (edgeScrollRef.current !== null) {
+      cancelAnimationFrame(edgeScrollRef.current);
+      edgeScrollRef.current = null;
+    }
     getController().cancel();
     store.setHoverClipId(null);
     const canvas = canvasRef.current;
     if (canvas !== null) canvas.style.cursor = 'default';
   }
-  function onPointerUp(): void {
+  function onPointerUp(event: React.PointerEvent<HTMLCanvasElement>): void {
+    if (marqueeRef.current !== null) {
+      endMarquee(false, event);
+      if (edgeScrollRef.current !== null) {
+        cancelAnimationFrame(edgeScrollRef.current);
+        edgeScrollRef.current = null;
+      }
+      return;
+    }
+    if (edgeScrollRef.current !== null) {
+      cancelAnimationFrame(edgeScrollRef.current);
+      edgeScrollRef.current = null;
+    }
     getController().pointerUp();
   }
 
@@ -1637,6 +1857,15 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
         onContextMenu={onContextMenu}
         onWheel={onWheel}
       />
+      {/*
+        S5 第二阶段的 DOM 浮层（框选矩形 / 跨轨指示线）：与 canvas 同一坐标系
+        （v-tl-inner 是 position:relative），随内容滚动——框选与指示线本来就是
+        "时间/轨道空间"里的东西。pointer-events:none，不挡画布事件。
+      */}
+      <div className="v-tl-overlay" data-v="tl-overlay" aria-hidden="true">
+        <div ref={indicatorElRef} className="v-tl-track-indicator" data-v="tl-track-indicator" hidden />
+        <div ref={marqueeElRef} className="v-tl-marquee" data-v="tl-marquee" hidden />
+      </div>
       {/**
        * 轨道头（DOM）：图标 / 名称 / 显示隐藏或静音 / 锁定 / 更多。
        *
@@ -1706,6 +1935,11 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
         }}
       />
       <ContextMenu state={menu} onClose={() => setMenu(null)} />
+      {/* 时长气泡：跟随指针（viewport 坐标，portal 到 body 避免被 overflow 裁剪） */}
+      {createPortal(
+        <div ref={bubbleElRef} className="v-tl-bubble" data-v="tl-bubble" hidden />,
+        document.body,
+      )}
     </section>
   );
 }
