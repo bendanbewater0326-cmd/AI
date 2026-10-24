@@ -40,6 +40,7 @@ import { attachAutosave, restoreSession } from '../persist/autosave';
 import { isBackupDue, latestBackup, writeBackup, writeExitBackup } from '../persist/backup';
 import { db as veditorDb } from '../persist/db';
 import { shortcutHint } from './settings/keymapView';
+import { BusyBar } from './BusyBar';
 import { probeMediaFile } from '../media/importPipeline';
 import { relinkAssetFromFile } from '../media/relink';
 import { autoRestoreFromDirectories, restoreFromCache, restoreFromHostPaths } from '../media/autoRestore';
@@ -626,9 +627,12 @@ function PreviewStage({ playing, onToggle, onSeek, frame, volume, onVolume, canv
 /** 错误条（最多 3 条、可逐条关闭；用 assertive 播报）。 */
 function ErrorBar(): ReactElement | null {
   const errors = useErrors();
-  if (errors.length === 0) return null;
+  // 零错误时也渲染 BusyBar：busy 与错误条是两个独立通道（33 处 setBusy 的唯一出口）
+  if (errors.length === 0) return <BusyBar />;
   return (
-    <div className="v-errorbar" data-v="errorbar" role="alert" aria-live="assertive">
+    <>
+      <BusyBar />
+      <div className="v-errorbar" data-v="errorbar" role="alert" aria-live="assertive">
       {errors.slice(0, 3).map((error) => (
         <div className="v-errorbar__item" key={`${error.code}-${error.at}`} data-v="error-item">
           <span>
@@ -645,7 +649,8 @@ function ErrorBar(): ReactElement | null {
           </button>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 

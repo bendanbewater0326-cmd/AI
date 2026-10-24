@@ -79,6 +79,15 @@ export function mapImportError(error: VEditorError, fileName: string): VEditorEr
   if (error.code === 'E_UNSUPPORTED_VARIANT') {
     return makeError('E_UNSUPPORTED_VARIANT', '不支持该 MP4 变体', `${fileName}：${error.detail ?? ''}`);
   }
+  if (error.code === 'E_DECODE_FAILED') {
+    // moov/stsd 等容器结构词不翻译在 demux 层（t05 直接断言原文），在**用户入口**翻译
+    // （体验打磨批 2，用户拍板文案）；内部词留在 detail 给诊断。
+    return makeError(
+      'E_DECODE_FAILED',
+      '文件无法正常读取，可能已损坏或格式不兼容，建议转换为标准 MP4 格式后重试',
+      `${fileName}：${error.detail ?? ''}`,
+    );
+  }
   return error;
 }
 

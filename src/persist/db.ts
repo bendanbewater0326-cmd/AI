@@ -110,7 +110,7 @@ export function mapIdbError(error: unknown): VEditorError {
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB 请求失败'));
+    request.onerror = () => reject(request.error ?? new Error('本地存储访问异常，请刷新页面后重试'));
   });
 }
 
@@ -118,8 +118,8 @@ function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
 function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB 事务失败'));
-    transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB 事务被中止'));
+    transaction.onerror = () => reject(transaction.error ?? new Error('本地存储访问异常，请刷新页面后重试'));
+    transaction.onabort = () => reject(transaction.error ?? new Error('本地存储访问异常，请刷新页面后重试'));
   });
 }
 

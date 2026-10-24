@@ -1019,6 +1019,18 @@ export function useSelection(): string | null {
 }
 
 /** 播放头帧（高频通道，供时间码文字使用；不要在播放头里做重活）。 */
+/**
+ * 全局 busy 文案（体验打磨批 1）：33 处 `setBusy` 调用的唯一渲染通道（BusyBar）。
+ * 快照返回字符串（或 null）——不返回对象，`useSyncExternalStore` 的 Object.is 比较才稳。
+ */
+export function useBusyLabel(): string | null {
+  return useSyncExternalStore(
+    store.subscribe,
+    () => store.getEphemeral().busyLabel,
+    () => null,
+  );
+}
+
 export function useFrame(): Frame {
   return useSyncExternalStore(playheadBus.subscribe, playheadBus.get, playheadBus.get);
 }

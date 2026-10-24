@@ -1468,7 +1468,7 @@ export function InspectorPanel(): ReactElement {
           </div>
           {presets.length === 0 ? (
             <div className="v-inspector__group v-inspector__group--tight">
-              <span className="v-inspector__hint" data-v="preset-empty">还没有预设</span>
+              <span className="v-inspector__hint" data-v="preset-empty">暂无自定义预设，调节参数后可点击「存为预设」创建</span>
             </div>
           ) : (
             presets.map((preset) => (

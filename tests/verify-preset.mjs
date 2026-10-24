@@ -227,7 +227,7 @@ try {
   const empty = await page.session.evaluate(
     `document.querySelector('[data-v="preset-empty"]')?.textContent ?? ''`,
   );
-  report.check(`⑥ 预设已删除（空态："${empty}"）`, empty.includes('还没有预设'));
+  report.check(`⑥ 预设已删除（空态："${empty}"）`, empty.includes('暂无自定义预设'));
 
   await page.screenshot({ path: path.join(ROOT, 'tests', 'screenshots', 'preset.png') });
   const errors = JSON.parse(await page.session.evaluate('JSON.stringify(window.__VEDITOR_TEST__.errors())'));

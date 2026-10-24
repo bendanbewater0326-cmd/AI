@@ -535,6 +535,39 @@ select:focus-visible,
 }
 
 /* 错误条：覆盖在顶栏下方，不改变布局尺寸 */
+/* ---------- 全局 busy 条（体验打磨批 1；33 处 setBusy 的唯一渲染出口） ---------- */
+
+.v-busybar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--v-fg);
+  background: var(--v-surface);
+  border-bottom: 0.5px solid var(--v-border);
+}
+
+.v-busybar__spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--v-accent-weak);
+  border-top-color: var(--v-accent);
+  border-radius: 50%;
+  animation: v-busy-spin 0.8s linear infinite;
+}
+
+@keyframes v-busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.v-busybar__label {
+  font-variant-numeric: tabular-nums;
+}
+
 .v-errorbar {
   position: absolute;
   top: 0;
