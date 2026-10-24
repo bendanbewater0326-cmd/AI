@@ -29,6 +29,7 @@ import { framesPerSecond } from '../core/timebase';
 import type { BlobLike, Mp4ProbeResult } from './demuxMp4';
 import { openMp4, readBlobBytes, readSample } from './demuxMp4';
 import type { WebmProbeResult } from './demuxWebm';
+import { openWav } from './demuxWav';
 import { openWebm } from './demuxWebm';
 
 /** 素材卡片缩略图尺寸（架构 §3 `ui/AssetPanel` 素材网格 90×51）。 */
@@ -43,7 +44,7 @@ export interface ProbeFile extends BlobLike {
 }
 
 /** 容器判定结果。 */
-export type ContainerKind = 'mp4' | 'webm' | 'unknown';
+export type ContainerKind = 'mp4' | 'webm' | 'wav' | 'mp3' | 'unknown';
 
 /** 缩略图解码输入：首样本 + 解码器配置。 */
 export interface ThumbnailDecodeInput {
@@ -99,6 +100,14 @@ function isEbml(head: Uint8Array): boolean {
 }
 
 /** 左上角 fourcc 是否为给定值。 */
+function textAt(head: Uint8Array, offset: number, length: number): string {
+  let out = '';
+  for (let index = offset; index < offset + length && index < head.byteLength; index += 1) {
+    out += String.fromCharCode(head[index] ?? 0);
+  }
+  return out;
+}
+
 function hasFourccAt(head: Uint8Array, offset: number, text: string): boolean {
   if (head.length < offset + text.length) return false;
   for (let i = 0; i < text.length; i += 1) {
@@ -115,6 +124,11 @@ function hasFourccAt(head: Uint8Array, offset: number, text: string): boolean {
 export async function sniffContainer(source: BlobLike): Promise<ContainerKind> {
   const head = await readBlobBytes(source, 0, Math.min(source.size, SNIFF_BYTES));
   if (isEbml(head)) return 'webm';
+  // WAV：RIFF + WAVE（8/12 字节）
+  if (head.byteLength >= 12 && textAt(head, 0, 4) === 'RIFF' && textAt(head, 8, 4) === 'WAVE') return 'wav';
+  // MP3：ID3v2 头 或 MPEG 帧同步字（0xFFE）
+  if (head.byteLength >= 3 && textAt(head, 0, 3) === 'ID3') return 'mp3';
+  if (head.byteLength >= 2 && (head[0] ?? 0) === 0xff && ((head[1] ?? 0) & 0xe0) === 0xe0) return 'mp3';
   if (hasFourccAt(head, 4, 'ftyp') || hasFourccAt(head, 4, 'styp')) return 'mp4';
   if (hasFourccAt(head, 4, 'moov') || hasFourccAt(head, 4, 'mdat') || hasFourccAt(head, 4, 'free')) return 'mp4';
   return 'unknown';
@@ -317,6 +331,43 @@ export async function probeAsset(file: ProbeFile, options: ProbeOptions = {}): P
         probe: webmProbe,
         durationSec: webmDurationSec,
       },
+    };
+  }
+  if (container === 'wav') {
+    const opened = await openWav(file);
+    if (!opened.ok) return { ok: false, error: opened.error };
+    // 契约说明：WAV probe 与 mp4/webm probe 同构，但 container 不在 MediaProbeResult
+    // 的字面量联合里（core/types 零改动的边界决策）——在此收窄为既有类型
+    //（previewSource/decoderPool 的边界本来就有同款 `as Mp4ProbeResult` 转型先例）。
+    const wavProbe = opened.value as unknown as Mp4ProbeResult;
+    const wavFps: MilliFps = wavProbe.fpsMilli === null ? DEFAULT_FPS_MILLI : wavProbe.fpsMilli;
+    const asset = createAsset({
+      ...(options.id === undefined ? {} : { id: options.id }),
+      name: file.name,
+      kind: 'audio',
+      handleRef: null,
+      sourceMode: 'memory',
+      status: 'memory',
+      fpsMilli: wavFps,
+      durationFrames: wavProbe.durationFrames,
+      durationSec: wavProbe.durationSec,
+      ...(wavProbe.sampleRate === null ? {} : { sampleRate: wavProbe.sampleRate }),
+      ...(wavProbe.channels === null ? {} : { channels: wavProbe.channels }),
+      width: 0,
+      height: 0,
+      hasAudio: true,
+      thumbnailRef: null,
+      // 'unknown' = 非 mp4/webm 容器（Asset.container 联合里已有的值，零 core 改动）
+      container: 'unknown',
+      codecVideo: null,
+      codecAudio: wavProbe.audioCodec,
+      rotation: 0,
+      exactSeek: true,
+      hashKey: `${file.name}|${file.size}|${file.lastModified ?? 0}`,
+    });
+    return {
+      ok: true,
+      value: { asset, thumbnail: null, probe: wavProbe, durationSec: wavProbe.durationSec },
     };
   }
   if (container === 'unknown') {

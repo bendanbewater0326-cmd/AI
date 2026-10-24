@@ -64,6 +64,11 @@ export function thumbnailToDataUrl(bitmap: ImageBitmap): string | null {
 /** 导入失败 → 可读错误（webm 与"变体不支持"分开说）。 */
 export function mapImportError(error: VEditorError, fileName: string): VEditorError {
   if (error.code === 'E_UNSUPPORTED_CONTAINER') {
+    // demuxWav 的非 PCM 拒绝文案是**给用户看的成品**（用户拍板），原样透传；
+    // 其余容器错误才做"请转 mp4"的通用转述。
+    if ((error.detail ?? '').includes('压缩格式') || error.message.includes('压缩格式')) {
+      return makeError('E_UNSUPPORTED_CONTAINER', error.message, `${fileName}：${error.detail ?? ''}`);
+    }
     const isWebm = (error.detail ?? '').includes('WebM');
     return makeError(
       'E_UNSUPPORTED_CONTAINER',

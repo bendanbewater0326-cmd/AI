@@ -43,6 +43,7 @@ import type { ErrorCode, Frame, Result, SampleIndexEntry, VEditorError } from '.
 import { makeError } from '../core/types';
 import type { BlobLike, Mp4ProbeResult } from './demuxMp4';
 import { readBlobBytes } from './demuxMp4';
+import { pcmChunkToPlanarF32, pcmCodecFormat } from './demuxWav';
 
 /* ---------- 常量（全部可被 options 覆盖） ---------- */
 
@@ -993,6 +994,52 @@ class DecoderPoolImpl implements DecoderPool {
     }
     const safeCount = Math.max(0, Math.min(count, audio.samples.length - startIndex));
     if (safeCount === 0) return { ok: true, value: [] };
+
+    // **PCM 直通**（WAV，W1）：裸 PCM 不需要解码——按样本索引切字节，
+    // 直接构造 f32-planar 的 AudioData（与解码输出同一格式，下游 copyTo 无感知）。
+    // codec 形如 `pcm-s16`（demuxWav 产出）；非 PCM codec 走下面的 AudioDecoder 路径。
+    if (audio.codec.startsWith('pcm-')) {
+      const pcmFormat = pcmCodecFormat(audio.codec);
+      if (pcmFormat === null) {
+        return { ok: false, error: makeError('E_DECODE_FAILED', '未知的 PCM 编码', audio.codec) };
+      }
+      const data: AudioData[] = [];
+      try {
+        for (let i = startIndex; i < startIndex + safeCount; i += 1) {
+          const sample = audio.samples[i];
+          if (sample === undefined) break;
+          const bytes = await readBlobBytes(asset.source, sample.offset, sample.offset + sample.size);
+          const planes = pcmChunkToPlanarF32(bytes, { ...pcmFormat, channels: audio.channels });
+          const frameCount = planes[0]?.length ?? 0;
+          const packed = new Float32Array(frameCount * audio.channels);
+          for (let channel = 0; channel < audio.channels; channel += 1) {
+            const plane = planes[channel];
+            if (plane === undefined) continue;
+            packed.set(plane, channel * frameCount);
+          }
+          data.push(
+            new AudioData({
+              format: 'f32-planar',
+              sampleRate: audio.sampleRate,
+              numberOfFrames: frameCount,
+              numberOfChannels: audio.channels,
+              timestamp: sample.ptsUs,
+              data: packed,
+            }),
+          );
+        }
+        return { ok: true, value: data };
+      } catch (error) {
+        return {
+          ok: false,
+          error: makeError(
+            'E_DECODE_FAILED',
+            '音频解码失败',
+            error instanceof Error ? error.message : String(error),
+          ),
+        };
+      }
+    }
 
     let session: AudioSession;
     try {

@@ -818,7 +818,14 @@ export function App(): ReactElement {
         // mp4 与 webm 都要放行：只认 mp4 会让 webm 片段「画面正常但播放无声」——
         // 音频调度器拿不到 probe 就直接跳过该片段，且不会报任何错。
         if (probe === undefined) return undefined;
-        if (probe.container !== 'mp4' && probe.container !== 'webm') return undefined;
+if (
+          probe.container !== 'mp4' &&
+          probe.container !== 'webm' &&
+          probe.container !== 'wav' &&
+          probe.container !== 'mp3'
+        ) {
+          return undefined;
+        }
         return probe as never;
       },
     });

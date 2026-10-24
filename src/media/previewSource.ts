@@ -127,7 +127,14 @@ export function ensurePreviewEngine(options: PreviewEngineOptions = {}): Playbac
   });
   // 重建后把已登记的素材重新喂给新引擎（否则刷新/改参数后预览全黑）
   for (const [assetId, entry] of sources) {
-    if (entry.probe.container !== 'mp4' && entry.probe.container !== 'webm') continue;
+    if (
+      entry.probe.container !== 'mp4' &&
+      entry.probe.container !== 'webm' &&
+      entry.probe.container !== 'wav' &&
+      entry.probe.container !== 'mp3'
+    ) {
+      continue;
+    }
     engine.registerAsset(assetId, entry.source, entry.probe as Mp4ProbeResult);
   }
   return engine;
@@ -156,13 +163,21 @@ export function registerPreviewSource(
 ): void {
   sources.set(assetId, { source, probe });
   if (engine === null) return;
-  // mp4 与 webm 都进池（T19 起 webm 也是帧精确实时源）。
+  // mp4 / webm / wav（/ mp3，W2 接入）都进池（T19 起 webm 也是帧精确实时源）。
   //
   // 类型断言说明：解码器池只读 `video`(codec/width/height/description)、`samples`、
-  // `keyframeIndex`、`audio.samples` —— 这些字段 `WebmProbeResult` 与 `Mp4ProbeResult`
-  // **完全同构**（T19 就是为此复用同一结构）；池不读 `timescale`/`durationTicks` 等
-  // mp4 独有的元数据，所以断言在运行时安全。
-  if (probe.container !== 'mp4' && probe.container !== 'webm') return;
+  // `keyframeIndex`、`audio.samples` —— 这些字段 `WebmProbeResult`/`WavProbeResult` 与
+  // `Mp4ProbeResult` **完全同构**（T19 就是为此复用同一结构）；池不读 `timescale`/
+  // `durationTicks` 等 mp4 独有的元数据，所以断言在运行时安全。
+  // 新增纯音频容器时这里必须同步（W1 教训：漏放行 = 音频无声且无任何报错）。
+  if (
+    probe.container !== 'mp4' &&
+    probe.container !== 'webm' &&
+    probe.container !== 'wav' &&
+    probe.container !== 'mp3'
+  ) {
+    return;
+  }
   /**
    * 注册（**覆盖**语义）。
    *
