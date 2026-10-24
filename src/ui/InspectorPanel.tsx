@@ -225,6 +225,14 @@ export function InspectorPanel(): ReactElement {
   /** 蒙版（R-056）：null = 这个片段没有蒙版。参数细调在这里，方位词在命令栏。 */
   const [mask, setMask] = useState<MaskParams | null>(null);
   const [speed, setSpeed] = useState('1');
+  /**
+   * 音量滑块拖动中的 **rAF 合帧**（性能专项 2026-10-24，用户拍板）：
+   * 拖动里每个 input 步长（0.05）原本都走一次完整 dispatch（doc 拷贝 + 订阅通知），
+   * 2000 片段实测连发 20 次出现 ~95ms 单帧尖峰。合帧后每个渲染帧至多提交一次、
+   * 且只提交**最后一次的值**；松手语义/撤销合并（mergeKey）不变。
+   * 数值输入框（淡入淡出）保持原失焦即时提交，不走这里。
+   */
+  const gainFrameRef = useRef<number | null>(null);
 
   // 选中变化时，本地值同步到真实值（批量时以主选片段为准，不一致项在渲染层显示空）
   useEffect(() => {
@@ -1087,8 +1095,13 @@ export function InspectorPanel(): ReactElement {
               onChange={(event) => {
                 const position = Number(event.target.value);
                 setVolume(position);
-                // 位置 → 振幅后写进 doc：显示值永远等于真实值（见 commitAudio 注释）
-                commitAudio({ gain: positionToGain(position) }, { mergeKey: `gain:${clip?.id ?? ''}` });
+                // 显示立即跟随；写库 rAF 合帧（同帧多次拖动只提交末值，显示与真实值最多差一帧）
+                if (gainFrameRef.current !== null) cancelAnimationFrame(gainFrameRef.current);
+                const clipIdForGain = clip?.id ?? '';
+                gainFrameRef.current = requestAnimationFrame(() => {
+                  gainFrameRef.current = null;
+                  commitAudio({ gain: positionToGain(position) }, { mergeKey: `gain:${clipIdForGain}` });
+                });
               }}
             />
             {/*
