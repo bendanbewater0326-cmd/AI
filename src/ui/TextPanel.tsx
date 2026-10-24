@@ -33,6 +33,7 @@ import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { createTextContent, makeError } from '../core/types';
 import { buildNewTextOps } from './textClip';
+import { PROJECT_TEMPLATES, buildTemplateOps } from '../core/projectTemplates';
 import { runPanelAI } from '../ai/panelFlow';
 import { isAIUsable } from '../ai/registry';
 import type { TextContent } from '../core/types';
@@ -176,6 +177,22 @@ export function TextPanel(): ReactElement {
     store.setSelectedClipId(plan.clipId);
   }
 
+  /**
+   * 创作模板（P1）：「编排方案」作用于当前工程——一次 dispatch = 单撤销步；
+   * 无视频片段时降级只落文字（notes 转成用户提示）。
+   */
+  function applyTemplate(templateId: string): void {
+    const template = PROJECT_TEMPLATES.find((item) => item.id === templateId);
+    if (template === undefined) return;
+    const doc = store.getDoc();
+    const applied = buildTemplateOps(doc, template);
+    if (applied.ops.length === 0) return;
+    store.dispatch(applied.ops, applied.summary);
+    if (applied.notes.length > 0) {
+      store.pushError(makeError('E_INVALID_PROJECT', applied.notes[0] ?? ''));
+    }
+  }
+
   /** 点系统模板：选中的是文字片段就套样式（保留内容），否则新建。 */
   function applyPreset(preset: TextPreset): void {
     const clip = selectedClip();
@@ -258,6 +275,23 @@ export function TextPanel(): ReactElement {
             onClick={() => setCategory(item.key)}
           >
             {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 创作模板（P1）：编排方案作用于当前工程（追加不清空）；点击即套用，chips 不弹窗 */}
+      <div className="v-textpanel__tplrow" data-v="template-row" role="group" aria-label="创作模板">
+        <span className="v-textpanel__tpllabel">创作模板</span>
+        {PROJECT_TEMPLATES.map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            className="v-textpanel__tplchip"
+            data-v={`template-${template.id}`}
+            title={`${template.name}：套用${template.anchor === 'start' ? '开场' : template.anchor === 'end' ? '结尾' : '当前位置'}的文字、特效与转场（可撤销）`}
+            onClick={() => applyTemplate(template.id)}
+          >
+            {template.name}
           </button>
         ))}
       </div>

@@ -1064,6 +1064,38 @@ body.v-splitter-dragging--y {
   cursor: pointer;
 }
 
+/* ---------- 创作模板行（文本面板顶部） ---------- */
+
+.v-textpanel__tplrow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.v-textpanel__tpllabel {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-textpanel__tplchip {
+  height: 22px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--v-fg);
+  background: var(--v-surface);
+  border: 0.5px solid var(--v-border);
+  border-radius: 11px;
+  cursor: pointer;
+}
+
+.v-textpanel__tplchip:hover {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+}
+
 /* ---------- AI 文案行（文本面板场景化入口） ---------- */
 
 .v-textpanel__airow {
