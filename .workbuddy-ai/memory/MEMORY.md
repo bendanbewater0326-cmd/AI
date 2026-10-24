@@ -26,10 +26,10 @@
 | 维度 | 实测值 | 复现 |
 |---|---|---|
 | 源码 | **105 个 ts/tsx / 3.3 万行**（108 文件含 app.css） | `Get-ChildItem -Recurse src -Include *.ts,*.tsx` |
-| 单测 | **733 条 / 42 脚本全绿** | `npm test` |
-| E2E | **65 个 `verify-*.mjs`**（全量 65/65，约 14 分钟） | `ls tests/verify-*.mjs \| wc -l` |
-| 构建 | `main.js` **862.6KB**（含 10 个内联音效）+ `main.css` 53.4KB | `npm run build` |
-| 时基守卫 | **110 文件 0 违规** | `npm run check` |
+| 单测 | **744 条 / 43 脚本全绿** | `npm test` |
+| E2E | **68 个 `verify-*.mjs`**（全量 68/68，约 13 分钟） | `ls tests/verify-*.mjs \| wc -l` |
+| 构建 | `main.js` **876.4KB**（含 10 个内联音效）+ `main.css` 54.1KB | `npm run build` |
+| 时基守卫 | **114 文件 0 违规** | `npm run check` |
 | git | 工作区干净、**28 提交**（领先 origin 18）、`.git` 20.6M | `git status --short` |
 
 > 数字会过期。**改功能时连数字和命令一起改**，别再写死快照。

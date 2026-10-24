@@ -37,6 +37,8 @@ import type { PreviewRegion } from '../media/previewSource';
 import { createAudioScheduler } from '../media/audioEngine';
 import type { AudioScheduler } from '../media/audioEngine';
 import { attachAutosave, restoreSession } from '../persist/autosave';
+import { isBackupDue, latestBackup, writeBackup, writeExitBackup } from '../persist/backup';
+import { db as veditorDb } from '../persist/db';
 import { probeMediaFile } from '../media/importPipeline';
 import { relinkAssetFromFile } from '../media/relink';
 import { autoRestoreFromDirectories, restoreFromCache, restoreFromHostPaths } from '../media/autoRestore';
@@ -996,6 +998,31 @@ export function App(): ReactElement {
     return () => {
       cancelled = true;
       detachAutosave?.();
+    };
+  }, []);
+
+  /**
+   * 工程**历史备份**（与 500ms 自动保存并行：自动保存管"现在"，备份管"历史"）。
+   * 每 60s 醒一次查"是否到了 5 分钟且内容有变化"（`isBackupDue` 是唯一判据）；
+   * `pagehide` 时尽力写一份「退出前备份」（浏览器不保证卸载路径落盘，所以只是兜底不是契约）。
+   */
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const doc = store.getDoc();
+        const latest = await latestBackup(doc.id, veditorDb);
+        if (latest.ok && isBackupDue(latest.value, doc, Date.now())) {
+          void writeBackup(doc, 'auto', veditorDb);
+        }
+      })();
+    }, 60_000);
+    const onHide = (): void => {
+      void writeExitBackup(store.getDoc(), veditorDb);
+    };
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('pagehide', onHide);
     };
   }, []);
 

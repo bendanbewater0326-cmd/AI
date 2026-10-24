@@ -1,5 +1,5 @@
 /**
- * IndexedDB 封装（架构 §10.1）：DB 名 `veditor`，version 3，六个 object store：
+ * IndexedDB 封装（架构 §10.1）：DB 名 `veditor`，version 4，七个 object store：
  *
  *   | store      | key         | value                  |
  *   |------------|-------------|------------------------|
@@ -8,6 +8,7 @@
  *   | `thumbs`   | assetId     | Blob                   |
  *   | `proxies`  | assetId     | Blob（代理 MP4）        |
  *   | `settings` | key         | unknown                |
+   | `projectBackups` | `projectId\|时间戳` | 工程历史备份（backup.ts）|
  *
  * 只做 `get / put / delete / clear / keys`（原生 50 行足够，不引入 `idb`）。
  * 所有可预期失败返回 `Result<T>`；配额异常映射为 `E_QUOTA_EXCEEDED`、环境不可用映射为 `E_IDB_UNAVAILABLE`（均为可读中文原因）。
@@ -18,7 +19,7 @@ import type { Result, VEditorError } from '../core/types';
 import { fail, makeError, ok } from '../core/types';
 
 export const DB_NAME = 'veditor';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const STORE_PROJECTS = 'projects';
 export const STORE_HANDLES = 'handles';
@@ -34,6 +35,13 @@ export const STORE_SETTINGS = 'settings';
  * 用户点过"批量重链…"选了文件夹，就等于授权了 —— 存下来，下次刷新可以静默扫描。
  */
 export const STORE_DIRECTORIES = 'directories';
+/**
+ * 工程**历史备份**（键 = `projectId|时间戳`，值 = 快照 + 原因）。
+ *
+ * 与 `projects` 的区别：那边是"现在"（单槽覆盖写），这边是"历史"（滚动保留 N 份）。
+ * 见 `persist/backup.ts`。
+ */
+export const STORE_PROJECT_BACKUPS = 'projectBackups';
 
 export type ObjectStoreName =
   | 'projects'
@@ -41,9 +49,10 @@ export type ObjectStoreName =
   | 'thumbs'
   | 'proxies'
   | 'settings'
-  | 'directories';
+  | 'directories'
+  | 'projectBackups';
 
-/** 建库时创建的 store 列表（**每次升级都会补齐缺失的 store**，所以加 store 只需往这里加）。 */
+/** 建库时创建的 store 列表（**每次升级都会补齐缺失的 store**，所以加 store 只需往这里加 + bump version）。 */
 export const OBJECT_STORES: readonly ObjectStoreName[] = [
   STORE_PROJECTS,
   STORE_HANDLES,
@@ -51,6 +60,7 @@ export const OBJECT_STORES: readonly ObjectStoreName[] = [
   STORE_PROXIES,
   STORE_SETTINGS,
   STORE_DIRECTORIES,
+  STORE_PROJECT_BACKUPS,
 ];
 
 /** 是否 DOMException（Node 环境下 `DOMException` 可能存在也可能不存在）。 */

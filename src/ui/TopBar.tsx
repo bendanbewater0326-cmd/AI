@@ -18,6 +18,7 @@ import { splitAtPlayhead } from '../core/keymap';
 import { ExportDialog } from './ExportDialog';
 import { SelfCheckPanel } from './SelfCheck';
 import { CacheDialog } from './CacheDialog';
+import { BackupDialog } from './BackupDialog';
 import { getAIProvider, isAIUsable } from '../ai/registry';
 import { parseProjectFile, projectFileName, serializeProjectFile } from '../persist/projectFile';
 import { resetPreviewSources } from '../media/previewSource';
@@ -81,6 +82,7 @@ export function TopBar({ buildId = '' }: { buildId?: string } = {}): ReactElemen
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [selfCheckOpen, setSelfCheckOpen] = useState(false);
   const [cacheOpen, setCacheOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
   /**
    * 订阅"任何状态变化"，让撤销/重做按钮的可用性跟着变。
    * `useDoc` 只在 doc 变化时重渲染，而 `canUndo` 依赖撤销栈深度（ephemeral 的一部分）。
@@ -404,6 +406,17 @@ async function importProjectFile(file: File): Promise<void> {
             >
               导出字幕（SRT）
             </button>
+            <button
+              type="button"
+              data-v="backup-open"
+              role="menuitem"
+              onClick={() => {
+                setProjectMenuOpen(false);
+                setBackupOpen(true);
+              }}
+            >
+              历史版本…
+            </button>
             <div className="v-topbar__dropdown-sep" role="separator" />
             {/**
               * 主题 / 缓存 / 构建时间都收进这里。
@@ -496,6 +509,7 @@ async function importProjectFile(file: File): Promise<void> {
       <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
       <SelfCheckPanel open={selfCheckOpen} onClose={() => setSelfCheckOpen(false)} />
       <CacheDialog open={cacheOpen} onClose={() => setCacheOpen(false)} />
+      <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} />
 
       {dialogOpen ? (
         <div className="v-dialog" role="dialog" aria-modal="true" aria-label="工程参数" data-v="params-dialog">

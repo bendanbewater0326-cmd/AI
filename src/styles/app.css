@@ -351,6 +351,45 @@ select:focus-visible,
   color: var(--v-error);
 }
 
+/* ---------- 历史版本（工程备份回退） ---------- */
+
+.v-backup__list {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v-backup__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+}
+
+.v-backup__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--v-fg);
+  min-width: 140px;
+}
+
+.v-backup__reason {
+  flex: 1;
+  font-size: 11px;
+  color: var(--v-fg-dim);
+}
+
+.v-backup__restore {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+
 .v-dialog__actions {
   display: flex;
   justify-content: flex-end;
