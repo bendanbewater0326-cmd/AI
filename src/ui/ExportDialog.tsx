@@ -11,6 +11,7 @@ import { framesPerSecond } from '../core/timebase';
 import { downloadExport, exportProject } from '../export/exporter';
 import type { ExportFormat, ExportProgress } from '../export/exporter';
 import { formatFps, formatTimecode } from './TopBar';
+import { previewRecompute } from '../core/operations';
 
 interface ExportDialogProps {
   open: boolean;
@@ -40,6 +41,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
   const [gifWidth, setGifWidth] = useState(480);
   const [gifFps, setGifFps] = useState(15);
   const [useRange, setUseRange] = useState(false);
+  /** 导出文件名（默认工程名；后缀从产物提取自动补全）。 */
+  const [fileName, setFileName] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [progress, setProgress] = useState<ExportProgress>({ ratio: 0, stage: '' });
   const [message, setMessage] = useState<string | null>(null);
@@ -50,6 +53,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
     setPhase('idle');
     setProgress({ ratio: 0, stage: '' });
     setMessage(null);
+    setFileName(store.getDoc().name);
   }, [open]);
 
   useEffect(() => {
@@ -62,6 +66,40 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
   }, [open, phase, onClose]);
 
   if (!open) return null;
+
+  /**
+   * 出片规格预设（P1，2026-10-25）：一键设置工程参数（导出跟随工程参数，码率按分辨率自动算——
+   * 复用 applyProjectParams/previewRecompute 全套链路，零导出层改动）。
+   * 「自定义」不是按钮：手动在工程参数里改过即自动处于该状态。
+   */
+  const EXPORT_PRESETS = [
+    { key: 'fhd', label: '1080P 高清', width: 1920, height: 1080 },
+    { key: 'hd', label: '720P 流畅', width: 1280, height: 720 },
+    { key: 'vertical', label: '竖屏短视频', width: 1080, height: 1920 },
+  ] as const;
+  const FPS_MILLI_PRESET = 30000;
+  const activePreset = EXPORT_PRESETS.find(
+    (preset) =>
+      doc.width === preset.width && doc.height === preset.height && doc.fpsMilli === FPS_MILLI_PRESET,
+  );
+  const isCustom = activePreset === undefined;
+
+  function applyPreset(preset: (typeof EXPORT_PRESETS)[number]): void {
+    const current = store.getDoc();
+    const next = { width: preset.width, height: preset.height, fpsMilli: FPS_MILLI_PRESET };
+    const clipCount = current.tracks.reduce((sum, track) => sum + track.clips.length, 0);
+    if (clipCount > 0 && (current.width !== next.width || current.height !== next.height || current.fpsMilli !== next.fpsMilli)) {
+      // 与顶栏工程参数同一份影响面口径（R-015：禁止只说"将重新换算"）
+      const preview = previewRecompute(current, next);
+      const okToApply = window.confirm(
+        `切换到「${preset.label}」会更新工程参数：${preview.affectedClipCount} 个片段的位置/时长会重新换算` +
+          `（最大位移 ${preview.maxShiftFrames} 帧）。
+预览画面会随之变化。继续吗？`,
+      );
+      if (!okToApply) return;
+    }
+    store.applyProjectParams(next);
+  }
 
   const ephemeral = store.getEphemeral();
   const markIn = ephemeral.markIn;
@@ -97,12 +135,16 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
       setMessage(result.error.message);
       return;
     }
-    downloadExport(result.value);
-    const sizeMb = result.value.blob.size / (1024 * 1024);
+    // 文件名编辑（P1）：用户输入覆盖默认工程名；后缀从产物提取（PNG 序列实际是 .zip——不自己映射）
+    const trimmed = fileName.trim().replace(/[\/:*?"<>|]+/g, '_');
+    const ext = (/[.][a-z0-9]+$/i.exec(result.value.filename))?.[0] ?? '.mp4';
+    const finalOutput = { ...result.value, filename: `${trimmed === '' ? current.name : trimmed}${ext}` };
+    downloadExport(finalOutput);
+    const sizeMb = finalOutput.blob.size / (1024 * 1024);
     setPhase('done');
     setProgress({ ratio: 1, stage: '完成' });
     setMessage(
-      `${result.value.filename} · ${result.value.frames} 帧 · ${sizeMb.toFixed(1)}MB${
+      `${finalOutput.filename} · ${finalOutput.frames} 帧 · ${sizeMb.toFixed(1)}MB${
         result.value.hasAudio ? '' : ' · 无音轨'
       }`,
     );
@@ -186,6 +228,58 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
             : '仅导出标记区间（先在时间线按 I / O 标记）'}
         </span>
       </label>
+
+      {/*
+        出片规格预设（P1）：导出分辨率/帧率跟随工程参数——预设即快捷设置工程参数；
+        手动改参数后自动处于「自定义」（点它引导去工程参数，不另开第二套参数面板）。
+      */}
+      {format === 'mp4' ? (
+        <div className="v-export__presets" role="group" aria-label="出片规格" data-v="export-presets">
+          {EXPORT_PRESETS.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              className="v-export__preset"
+              data-v={`export-preset-${preset.key}`}
+              data-active={activePreset?.key === preset.key}
+              aria-pressed={activePreset?.key === preset.key}
+              disabled={phase === 'running'}
+              title={`${preset.label}（${preset.width}×${preset.height} · 30fps）`}
+              onClick={() => applyPreset(preset)}
+            >
+              {preset.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="v-export__preset"
+            data-v="export-preset-custom"
+            data-active={isCustom}
+            aria-pressed={isCustom}
+            disabled={phase === 'running'}
+            title="手动在「工程 → 工程参数」里调整分辨率与帧率"
+            onClick={() => setMessage('分辨率与帧率在顶部「工程 → 工程参数」中调整，导出会跟随当前工程参数')}
+          >
+            自定义
+          </button>
+        </div>
+      ) : null}
+
+      {/* 文件名（默认工程名，后缀按导出类型自动补全） */}
+      <div className="v-export__namerow">
+        <label className="v-export__namelabel" htmlFor="v-export-filename">文件名</label>
+        <input
+          id="v-export-filename"
+          className="v-export__nameinput"
+          data-v="export-filename"
+          type="text"
+          value={fileName}
+          maxLength={80}
+          disabled={phase === 'running'}
+          aria-label="导出文件名"
+          onChange={(event) => setFileName(event.target.value)}
+        />
+      </div>
 
       <div className="v-dialog__detail v-dialog__detail--dim" data-v="export-summary">
         {`${doc.width}×${doc.height} · ${formatFps(doc.fpsMilli)}fps · 时长 ${(

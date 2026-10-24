@@ -535,6 +535,60 @@ select:focus-visible,
 }
 
 /* 错误条：覆盖在顶栏下方，不改变布局尺寸 */
+/* ---------- 导出预设与文件名（P1） ---------- */
+
+.v-export__presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.v-export__preset {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--v-fg);
+  background: var(--v-surface);
+  border: 0.5px solid var(--v-border);
+  border-radius: 13px;
+  cursor: pointer;
+}
+
+.v-export__preset[data-active='true'] {
+  color: var(--v-accent);
+  border-color: var(--v-accent);
+  background: var(--v-accent-weak);
+}
+
+.v-export__preset:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.v-export__namerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.v-export__namelabel {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--v-fg-dim);
+}
+
+.v-export__nameinput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--v-fg);
+  background: var(--v-surface);
+  border: 0.5px solid var(--v-border);
+  border-radius: var(--v-radius);
+}
+
 /* ---------- 全局 busy 条（体验打磨批 1；33 处 setBusy 的唯一渲染出口） ---------- */
 
 .v-busybar {
