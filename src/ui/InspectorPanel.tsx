@@ -41,6 +41,7 @@ import {
 } from '../core/volume';
 import type { ColorGrade } from '../render/compositor';
 import { store, useDoc, useFrame, useSelection } from '../core/store';
+import { clipKindOf, type ClipKind } from './clipKind';
 import { buildPresetOps, capturePreset, createPreset, MAX_PRESET_NAME } from '../core/preset';
 import { buildTransitionOps, resolveDuration } from '../core/transitionTarget';
 import type { Preset } from '../core/preset';
@@ -70,9 +71,6 @@ const BLEND_MODES: ReadonlyArray<{ value: BlendMode; label: string }> = [
   { value: 'multiply', label: '正片叠底' },
 ];
 
-/** 片段类型（分组渲染的判据）。 */
-type ClipKind = 'text' | 'audio' | 'video';
-
 /** 选中集合的类型：none=未选中，mixed=混合多类型。 */
 type SelectionKind = 'none' | ClipKind | 'mixed';
 
@@ -82,13 +80,6 @@ function findClipIn(doc: Project, clipId: string): Clip | null {
     if (clip !== undefined) return clip;
   }
   return null;
-}
-
-function clipKindOf(doc: Project, clip: Clip): ClipKind {
-  if (clip.text !== null && clip.text !== undefined) return 'text';
-  const asset = doc.assets.find((item) => item.id === clip.assetId);
-  if (clip.role === 'audio' || asset?.kind === 'audio') return 'audio';
-  return 'video';
 }
 
 /** 订阅完整选中集合（主选 + Ctrl 加选），快照用拼接串保证稳定。 */

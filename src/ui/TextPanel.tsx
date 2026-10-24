@@ -31,17 +31,15 @@
  */
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
-import { createClip, createTextContent, makeError } from '../core/types';
+import { createTextContent, makeError } from '../core/types';
+import { buildNewTextOps } from './textClip';
 import type { TextContent } from '../core/types';
-import { ensureTextTrackOps } from '../core/placement';
 import { TEXT_CATEGORIES, TEXT_PRESETS, presetToText, textPresetsIn } from '../core/textPresets';
-import { defaultClipSeconds } from '../core/prefs';
 import type { TextCategory, TextPreset } from '../core/textPresets';
 import { MAX_PRESET_NAME, buildPresetOps, capturePreset, createPreset } from '../core/preset';
 import type { Preset } from '../core/preset';
 import { PRESETS_CHANGED, addPreset, loadPresets, removePreset } from '../persist/presets';
 import { store, useDoc, useSelection } from '../core/store';
-import { secondsToFrames } from '../core/timebase';
 import { clearDraggingText, setTextDrag } from './dnd';
 
 /**
@@ -133,22 +131,10 @@ export function TextPanel(): ReactElement {
 
   /** 在播放头新建一段文字（落文字轨；建轨与落片同批提交 = 一个撤销步）。 */
   function createText(text: TextContent, label: string): void {
-    const doc = store.getDoc();
-    const startFrame = store.getPlayheadFrame();
-    const durationFrames = Math.max(1, secondsToFrames(defaultClipSeconds(), doc.fpsMilli));
-    const { ops, trackId } = ensureTextTrackOps(doc, startFrame, durationFrames);
-    const clip = createClip({
-      assetId: '',
-      trackId,
-      startFrame,
-      inFrame: 0,
-      outFrame: durationFrames,
-      durationFrames,
-      text,
-    });
-    store.dispatch([...ops, { op: 'addClip', clip }], label);
+    const plan = buildNewTextOps(store.getDoc(), store.getPlayheadFrame(), text);
+    store.dispatch(plan.ops, label);
     // 立刻选中：右侧属性栏会切到文字控件，用户可以马上改内容
-    store.setSelectedClipId(clip.id);
+    store.setSelectedClipId(plan.clipId);
   }
 
   /** 点系统模板：选中的是文字片段就套样式（保留内容），否则新建。 */

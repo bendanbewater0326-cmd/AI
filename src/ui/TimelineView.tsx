@@ -96,6 +96,9 @@ import { defaultClipSeconds } from '../core/prefs';
 import { transitionPresetById } from '../core/transitionPresets';
 import { buildTransitionOps, clipAtFrame, resolveDuration, resolveTransitionTarget, snapToSeam } from '../core/transitionTarget';
 import { effectPresetById } from '../core/effectPresets';
+import { buildSplitOperations, removeSelectedClip, rippleDeleteSelectedClip } from '../core/keymap';
+import { clipKindOf } from './clipKind';
+import { buildNewTextOps } from './textClip';
 import { buildEffectOps, resolveEffectTarget } from '../core/effectTarget';
 import { ensureSfxAsset, sfxPresetById } from './audio/sfxLibrary';
 
@@ -1009,19 +1012,26 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
     event.preventDefault();
     const doc = store.getDoc();
     const hit = hitTest(doc, store.getEphemeral(), laneX(event), screenY(event));
-    /**
-     * 空白处右键：粘贴 + 在**这个位置**插入一段音频。
-     *
-     * **这条分支以前永远走不到**：旧代码在 `hit.clipId === null` 时就 `setMenu(null)`
-     * 提前返回了，于是"粘贴到此处"从上线起就没生效过（用户右键空白处什么都不会发生，
-     * 只会以为右键坏了）。判空必须在**取到片段之后**做，而不是在 hitTest 之后。
-     */
     const clip =
       hit.clipId === null
         ? undefined
         : doc.tracks.flatMap((track) => track.clips).find((item) => item.id === hit.clipId);
+
+    // ---- 空白右键：新建文字 / 粘贴 / 插入音频 ----
+    // （判空必须在取到片段之后做：旧代码在 hitTest 后提前返回，"粘贴到此处"从上线起就没生效过）
     if (clip === undefined) {
-      const items: ContextMenuItem[] = [];
+      const items: ContextMenuItem[] = [
+        {
+          // 点哪建哪：右键点击的时间位置就是文字片段起点。与文本面板共用
+          // buildNewTextOps（建轨+落片一个撤销步、时长走偏好设置），不是第二套实现
+          label: '在此处新建文字',
+          onSelect: () => {
+            const plan = buildNewTextOps(store.getDoc(), hit.frame, createTextContent());
+            store.dispatch(plan.ops, '新建文字');
+            store.setSelectedClipId(plan.clipId);
+          },
+        },
+      ];
       if (clipboardSize() > 0) {
         items.push({
           label: '粘贴到此处',
@@ -1039,16 +1049,76 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
       setMenu({ x: event.clientX, y: event.clientY, items });
       return;
     }
-    store.setSelectedClipId(clip.id);
 
+    /**
+     * **多选保持**：右键命中的片段已在选中集合里（且是多选）→ 不动选择，
+     * 菜单批量作用于整个选中集合；不在 → 单选它（剪映/PR 同款）。
+     * 多选时只给批量项：定格/倒放/静音这些是"单片段属性"，对值不一致的多选
+     * 没有合理语义（剪映多选右键也只有复制/删除类）。
+     */
+    const selection = store.getSelection();
+    const inMulti = selection.length > 1 && selection.includes(clip.id);
+    if (!inMulti) store.setSelectedClipId(clip.id);
+
+    if (inMulti) {
+      const n = selection.length;
+      const suffix = ` ${n} 个片段`;
+      setMenu({
+        x: event.clientX,
+        y: event.clientY,
+        items: [
+          {
+            label: `复制${suffix}`,
+            onSelect: () => {
+              copyClips(store.getDoc(), store.getSelection());
+            },
+          },
+          {
+            label: `波纹删除${suffix}`,
+            onSelect: () => {
+              rippleDeleteSelectedClip(store);
+            },
+          },
+          {
+            label: `删除${suffix}`,
+            danger: true,
+            onSelect: () => {
+              removeSelectedClip(store);
+            },
+          },
+        ],
+      });
+      return;
+    }
+
+    // ---- 单选：按片段类型裁剪（判据与属性栏同一份 clipKindOf，无关项不渲染） ----
+    const kind = clipKindOf(doc, clip);
     const asset = doc.assets.find((item) => item.id === clip.assetId);
+    const hasAudio = asset !== undefined && asset.hasAudio;
     const detachBlocked = detachAudioBlockReason(doc, clip);
     const muted = clip.audio.gain === 0;
-    const hasAudio = asset !== undefined && asset.hasAudio;
     const freezeBlocked = freezeBlockReason(doc, clip, store.getPlayheadFrame());
+    const splitInside = hit.frame > clip.startFrame && hit.frame < clip.startFrame + clip.durationFrames;
+
     const items: ContextMenuItem[] = [
-      // 「分离音频」放在第一位：这是剪映/PR 里最常用的右键操作
       {
+        // **分割 = 点哪切哪**：切割位置是右键点击的时间坐标，不是播放头。
+        // 与 B 键/顶栏分割按钮同一套 buildSplitOperations（边界校验都在那一个定义点）
+        label: splitInside ? '分割' : '分割（点击位置不在片段内）',
+        ...(splitInside ? {} : { disabled: true }),
+        onSelect: () => {
+          const ops = buildSplitOperations(store.getDoc(), hit.frame, clip.id);
+          if (ops.length === 0) {
+            store.pushError(makeError('E_INVALID_PROJECT', '这个位置切不开（太贴近片段边缘）'));
+            return;
+          }
+          store.dispatch(ops, '切分片段');
+        },
+      },
+    ];
+    if (kind === 'video') {
+      // 「分离音频」放在音频类第一位：剪映/PR 里最常用的右键操作
+      items.push({
         label: detachBlocked === null ? '分离音频' : `分离音频（${detachBlocked}）`,
         ...(detachBlocked === null ? {} : { disabled: true }),
         onSelect: () => {
@@ -1059,23 +1129,40 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
           }
           store.dispatch(plan.ops, '分离音频');
         },
-      },
-      {
-        // 只把**这一段的**声音存成 WAV（区间 = 片段区间，且只有它参与混音）
+      });
+    }
+    if (kind === 'audio') {
+      items.push({
+        label: muted ? '取消静音' : '静音',
+        onSelect: () => {
+          store.dispatch(
+            [{ op: 'setClipProps', clipId: clip.id, path: 'audio.gain', from: clip.audio.gain, to: muted ? 1 : 0 }],
+            muted ? '取消静音' : '静音片段',
+          );
+        },
+      });
+    }
+    if (kind !== 'text') {
+      // 只把**这一段的**声音存成 WAV（区间 = 片段区间，且只有它参与混音）
+      items.push({
         label: '导出这段的音频…',
         disabled: !hasAudio,
         onSelect: () => {
           void exportClipAudio(clip);
         },
-      },
-      {
-        // 从片段开头对齐插入一段外部音频（相当于给这段配一条声轨）
+      });
+    }
+    if (kind === 'video') {
+      // 从片段开头对齐插入一段外部音频（相当于给这段配一条声轨）
+      items.push({
         label: '配一段音频…',
         onSelect: () => pickAudioAt(clip.startFrame, '配音频'),
-      },
-      { separator: true },
-      {
-        // 定格：播放头那一帧冻住 3 秒（剪映的默认值），后面的内容整体后移
+      });
+    }
+    if (kind === 'video') {
+      items.push({ separator: true });
+      // 定格/倒放是**画面帧语义**：只有视频/图片片段有（音频没有画面、文字没有帧）
+      items.push({
         label: freezeBlocked === null ? '定格（播放头这一帧，3 秒）' : `定格（${freezeBlocked}）`,
         ...(freezeBlocked === null ? {} : { disabled: true }),
         onSelect: () => {
@@ -1087,10 +1174,9 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
           store.dispatch(plan.ops, '定格 3 秒');
           store.setSelectedClipId(plan.clipId);
         },
-      },
-      {
-        // 倒放只倒画面（音频路径按块解码，倒放会变成一段段碎的怪声）——
-        // 所以倒放同时把这段的声音关掉，文案里写清楚
+      });
+      items.push({
+        // 倒放只倒画面——音频路径按块解码，倒放会变成一段段碎的怪声，所以同时静音
         label: clip.reversed === true ? '取消倒放' : '倒放（只倒画面，静音）',
         disabled: clip.freeze === true,
         onSelect: () => {
@@ -1103,9 +1189,11 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
             next ? '倒放' : '取消倒放',
           );
         },
-      },
-      {
-        // 旋转/翻转：菜单里给最常用的两个，细调在属性栏（`docs/nle-baseline.md` §6）
+      });
+    }
+    if (kind !== 'audio') {
+      // 旋转/翻转对文字同样有意义（文字有 transform）
+      items.push({
         label: '向右旋转 90°',
         onSelect: () => {
           const from = normalizeRotation(clip.transform.rotation);
@@ -1114,8 +1202,8 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
             '向右旋转 90°',
           );
         },
-      },
-      {
+      });
+      items.push({
         label: clip.transform.flipX === true ? '取消水平翻转' : '水平翻转',
         onSelect: () => {
           const next = clip.transform.flipX !== true;
@@ -1124,10 +1212,11 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
             next ? '水平翻转' : '取消水平翻转',
           );
         },
-      },
-      {
-        // 直接"把声音扔掉"（不新建片段），和"静音"是两件事：
-        // 静音还能调回来，删除音频是把这段的音频角色彻底去掉
+      });
+    }
+    if (kind === 'video') {
+      // 直接"把声音扔掉"（不新建片段），和"静音"是两件事：静音能调回来，删除音频是彻底去掉
+      items.push({
         label: '删除音频（只留画面）',
         disabled: !hasAudio || clip.role === 'video',
         onSelect: () => {
@@ -1136,17 +1225,18 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
             '删除音频',
           );
         },
-      },
-      {
+      });
+      items.push({
         label: muted ? '取消静音' : '静音',
-        disabled: !hasAudio,
         onSelect: () => {
           store.dispatch(
             [{ op: 'setClipProps', clipId: clip.id, path: 'audio.gain', from: clip.audio.gain, to: muted ? 1 : 0 }],
             muted ? '取消静音' : '静音片段',
           );
         },
-      },
+      });
+    }
+    items.push(
       { separator: true },
       {
         label: '复制',
@@ -1155,13 +1245,22 @@ export function TimelineView({ transport }: TimelineViewProps): ReactElement {
         },
       },
       {
-        label: '删除片段',
-        danger: true,
+        // 波纹删除（Shift+Delete 同款）：删除后同轨后续片段左移，一个撤销步
+        label: '波纹删除',
         onSelect: () => {
-          store.dispatch([{ op: 'removeClip', clipId: clip.id, removed: clip }], '删除片段');
+          rippleDeleteSelectedClip(store);
         },
       },
-    ];
+      {
+        label: '删除片段',
+        danger: true,
+        // 复用键盘 Delete 的批量路径（removeSelectedClip）：单选时删这一段，
+        // 行为与文案一致；这里恒为单选（多选分支在上面提前返回）
+        onSelect: () => {
+          removeSelectedClip(store);
+        },
+      },
+    );
     setMenu({ x: event.clientX, y: event.clientY, items });
   }
 
