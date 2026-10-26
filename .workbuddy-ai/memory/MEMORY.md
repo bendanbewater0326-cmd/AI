@@ -114,8 +114,14 @@
 ### 版本管理（2026-10-22 建立）
 
 - 仓库已 `git init`，`main` 分支、13 个提交；工作区干净。
-- **远端已配但未推送**：`origin = https://github.com/bendanbewater0326-cmd/AI.git`，
-  本机到 GitHub 不通（代理 `CONNECT tunnel failed 502`）。网络恢复后直接 `git push -u origin main`。
+- **远端**：`origin = https://github.com/bendanbewater0326-cmd/AI.git`，`main` 分支。
+  **2026-10-26 已首次成功推送**（45 个提交，`f4a6c94..1324563`）。
+  ⚠️ **代理挂了别急着怪网**：本机 git 配了 `http.proxy = http://127.0.0.1:7897`，
+  该端口偶尔不通（报 `Failed to connect to github.com:443 over proxy`）。此时**直连是通的**：
+  ```bash
+  git -c http.proxy= -c https.proxy= push origin main
+  ```
+  实测 2026-10-26 有效（`ls-remote` 与 `push` 都成功）。先试这条再考虑换网络。
 - `.gitattributes` 统一 `eol=lf`；写 `.gitignore` / `.gitattributes` **必须用 LF**（Python 要 `newline='\n'`，
   否则规则末尾带 `\r` 匹配不上，踩过一次）。
 - `tests/fixtures/` 音视频（~188MB）**不进仓库**，新环境 clone 后先跑
