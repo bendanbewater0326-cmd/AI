@@ -60,6 +60,14 @@ const APP_VERSION: string = typeof __APP_VERSION__ === 'undefined' ? '开发版'
 export interface SettingsPanelProps {
   /** 构建时间戳（App 从 `dist/build-id.txt` 读一次后传下来，这里不重复 fetch）。 */
   buildId: string;
+  /**
+   * 重新打开新手引导（「关于」组的入口）。
+   *
+   * 可选：设置面板在别处也可能被单独渲染（没接引导就没有这个回调）。
+   * **注意这里不看 localStorage 标记** —— 用户主动点的，就该再看一遍，
+   * 这正是"不自动打扰、但想看随时能看"的实现方式。
+   */
+  onShowOnboarding?: () => void;
 }
 
 export function SettingsPanel(props: SettingsPanelProps): ReactElement {
@@ -302,6 +310,23 @@ export function SettingsPanel(props: SettingsPanelProps): ReactElement {
           <strong>隐私</strong>：素材不会上传。解码、渲染、导出全部在本机完成；
           使用 AI 功能时只发送你的指令文本与工程结构（轨道、片段、时长），
           <strong>不发送画面与音频</strong>。
+        </div>
+
+        {/*
+          重新查看新手引导：**帮助类**的东西和「清空数据」放在同一组，但排在它上面 ——
+          用户想找"怎么用"的时候，不该先看到"把数据删了"。
+          手动唤起不看 `veditor:onboarding` 标记（主动点就该能看）。
+        */}
+        <button
+          type="button"
+          className="v-settings__button"
+          data-v="settings-replay-onboarding"
+          onClick={() => props.onShowOnboarding?.()}
+        >
+          重新查看新手引导
+        </button>
+        <div className="v-settings__note" data-v="settings-onboarding-note">
+          再看一遍怎么导入、剪辑和导出。
         </div>
 
         {confirmClear ? (

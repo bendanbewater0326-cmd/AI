@@ -46,12 +46,14 @@ import { relinkAssetFromFile } from '../media/relink';
 import { autoRestoreFromDirectories, restoreFromCache, restoreFromHostPaths } from '../media/autoRestore';
 import { cacheStats, currentBackend, isCacheAvailable, pendingCacheJobs } from '../media/draftCache';
 import { unregisterPreviewSource } from '../media/previewSource';
-import { getAIProvider, setAIProvider } from '../ai/registry';
+import { getAIProvider, isAIUsable, setAIProvider } from '../ai/registry';
 import type { AIProvider } from '../ai/provider';
 import { MemoryModeBanner } from './AssetPanel';
 import { CommandBar } from './CommandBar';
 import { InspectorPanel } from './InspectorPanel';
 import { LeftPanel, getActiveLeftTab } from './LeftPanel';
+import { Onboarding } from './onboarding/Onboarding';
+import { markOnboardingFinished, readOnboardingStatus } from './onboarding/state';
 import { Splitter, applyPanelWidth, hasStoredPct, readStoredCollapsed, readStoredPct, storeCollapsed, storePct } from './splitter';
 import { Toast } from './Toast';
 import type { ToastPayload } from './Toast';
@@ -718,6 +720,8 @@ export function App(): ReactElement {
   const frame = useFrame();
   const selection = useSelection();
   const [commandOpen, setCommandOpen] = useState(false);
+  /** 新手引导是否显示（首次进入自动开一次；设置面板的「重新查看」也走这个 state）。 */
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   /** 构建时间戳（顶栏显示）：用来区分"代码没生效"和"页面没刷新"。 */
   const [buildId, setBuildId] = useState('');
   const [toast, setToast] = useState<ToastPayload | null>(null);
@@ -770,6 +774,24 @@ export function App(): ReactElement {
   // 高对比主题（R-064）：启动时恢复上次选择
   useEffect(() => {
     void restoreTheme();
+  }, []);
+
+  /**
+   * 新手引导：**首次**进入自动开一次。
+   *
+   * - 已经看过（`done` / `skipped`）就不再打扰 —— 用户明确要"不重复打扰"；
+   *   想再看走设置面板的「重新查看」（手动唤起不看标记）。
+   * - **等 300ms 再开**：首帧布局还没稳定，`getBoundingClientRect` 可能算出 0 宽，
+   *   引导会以为目标不存在而白白跳过第一步。
+   * - `?onboarding=off` 关掉自动触发（**只关自动**，设置面板的入口照旧可用）。
+   *   E2E 靠它默认关闭：见 `tests/cdp.mjs` 的 `launchPage` —— 每个脚本都是全新
+   *   user-data-dir（等于首次访问），若不关，tip 可能盖住待点击的控件。
+   */
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('onboarding') === 'off') return;
+    if (readOnboardingStatus() !== null) return;
+    const timer = window.setTimeout(() => setOnboardingOpen(true), 300);
+    return () => window.clearTimeout(timer);
   }, []);
 
   /**
@@ -1426,7 +1448,11 @@ if (
           data-left-collapsed={collapsed.left}
           data-right-collapsed={collapsed.right}
         >
-          <LeftPanel buildId={buildId} onSeek={(frame) => transport.seekTo(frame, 'exact')} />
+          <LeftPanel
+            buildId={buildId}
+            onSeek={(frame) => transport.seekTo(frame, 'exact')}
+            onShowOnboarding={() => setOnboardingOpen(true)}
+          />
           <Splitter
             side="left"
             collapsed={collapsed.left}
@@ -1491,6 +1517,21 @@ if (
           }}
         />
       ) : null}
+      {/*
+        新手引导：portal 挂到 `document.body`，所以放在这层不影响定位。
+        关闭时**先写标记再关**：写失败（隐私模式）最多下次再弹一次，不会卡住界面。
+        第 6 步要不要显示由 `aiAvailable` 决定（`resolveSteps` 过滤，组件里不再判 `requiresAI`）。
+        `isAIUsable()` 与顶栏 `[data-v="ai-open"]` 的 `disabled` **同源** ——
+        "按钮亮着但引导跳过它"才是最别扭的（默认的离线规则引擎也算可用）。
+      */}
+      <Onboarding
+        open={onboardingOpen}
+        aiAvailable={isAIUsable()}
+        onClose={(status) => {
+          markOnboardingFinished(status);
+          setOnboardingOpen(false);
+        }}
+      />
       <Toast
         toast={toast}
         onUndo={() => {

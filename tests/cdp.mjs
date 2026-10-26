@@ -148,8 +148,34 @@ class CdpSession {
   }
 }
 
-/** 启动无头 Edge，打开页面并返回 CDP 会话。 */
-export async function launchPage({ url, width = 1440, height = 900 }) {
+/**
+ * 给 url 追加/覆盖一个查询参数。
+ *
+ * **必须走 URL API**，不能拼 `?`/`&`：既有脚本的 url 大多已经带了 `?src=...`
+ * （指向本地素材 fixture 的服务），字符串拼接会拼出 `...?src=x&?onboarding=off` 这种坏地址。
+ */
+function withQuery(url, key, value) {
+  const parsed = new URL(url);
+  parsed.searchParams.set(key, value);
+  return parsed.toString();
+}
+
+/**
+ * 启动无头 Edge，打开页面并返回 CDP 会话。
+ *
+ * ## `onboarding` 默认 `'off'`（重要）
+ *
+ * 新手引导会在**首次访问**时自动弹出（300ms 后）。E2E 每个脚本都是一次全新访问
+ * （`--user-data-dir` 是临时目录），所以 75 个既有脚本都会撞上引导浮层。
+ * 引导的 tip 是 `pointer-events: auto`，如果它正好盖在某个待点击的控件上，
+ * 点击就会落到 tip 上 —— 那不是引导的 bug，是"测试没关掉引导"。
+ *
+ * 与其让 75 个脚本各写一遍 `?onboarding=off`（一定会有漏的），
+ * 不如在**入口统一默认关掉**：既有脚本一行都不用改。
+ * 引导自己的验收（`tests/verify-onboarding.mjs`）显式传 `onboarding: 'on'`。
+ */
+export async function launchPage({ url, width = 1440, height = 900, onboarding = 'off' }) {
+  const finalUrl = withQuery(url, 'onboarding', onboarding);
   const executable = findBrowser();
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'veditor-cdp-'));
   const child = spawn(
@@ -170,7 +196,7 @@ export async function launchPage({ url, width = 1440, height = 900 }) {
       '--disable-backgrounding-occluded-windows',
       '--disable-renderer-backgrounding',
       '--disable-features=CalculateNativeWinOcclusion',
-      url,
+      finalUrl,
     ],
     { stdio: 'ignore' },
   );

@@ -4552,3 +4552,152 @@ body.v-caption-tl-dragging * {
   color: var(--v-fg-dim);
   font-variant-numeric: tabular-nums;
 }
+
+/* ==========================================================================
+   新手引导（新手向导）：一块挖了洞的蒙层 + 跟着目标走的提示框
+   --------------------------------------------------------------------------
+   颜色一律走 CSS 变量（--v-surface / --v-fg / --v-accent …），
+   这样高对比主题（:root[data-theme='contrast']）会自动跟着变，不用在这里再写一套。
+   ========================================================================== */
+
+.v-onboarding {
+  position: fixed;
+  inset: 0;
+  /* 在普通面板之上、弹窗（--v-z-commandbar: 100）之下：引导期间用户仍能打开导出对话框 */
+  z-index: 90;
+  /*
+   * **整层不吃指针事件**（重要，别改回 auto）。
+   * 命中测试只看几何、不看背景透明度：inset:0 + pointer-events:auto 会把整屏点击全吃掉，
+   * 底下的「导入」按钮和时间轴一个都点不到 —— 与"引导期间用户能真去操作"直接冲突。
+   * 事件的判断全部交给组件里的 window pointerdown 监听。
+   */
+  pointer-events: none;
+}
+
+/*
+ * 高亮洞：一个 div + 超大投影画出四边的暗区。
+ * 位置一变只改 left/top/width/height 四个值，永远不会有拼接缝。
+ */
+.v-onboarding__spotlight {
+  position: fixed;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.62);
+  pointer-events: none;
+  transition:
+    left 0.22s ease,
+    top 0.22s ease,
+    width 0.22s ease,
+    height 0.22s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v-onboarding__spotlight {
+    transition: none;
+  }
+}
+
+/*
+ * 提示框：固定宽度（不是 max-width）。
+ * 宽度固定后 `getBoundingClientRect()` 量出来的尺寸就是最终尺寸，
+ * 定位不必二次修正；文案换行也不会让框在左右两侧之间跳来跳去。
+ */
+.v-onboarding__tip {
+  position: fixed;
+  width: 268px;
+  padding: 12px 14px;
+  border: 1px solid var(--v-border);
+  border-radius: 6px;
+  background: var(--v-surface);
+  color: var(--v-fg);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+
+.v-onboarding__step {
+  font-size: 11px;
+  color: var(--v-fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.v-onboarding__title {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--v-fg);
+}
+
+.v-onboarding__body {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--v-fg);
+  word-break: break-word;
+}
+
+/* 正文里的 `**加粗**`（配置允许这个标记；措辞重点是按键名 / 操作名） */
+.v-onboarding__body strong {
+  font-weight: 600;
+  color: var(--v-accent);
+}
+
+.v-onboarding__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.v-onboarding__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 「跳过」是低优先级动作：不抢视觉，但也别让人找不着 */
+.v-onboarding__skip {
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--v-fg-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.v-onboarding__skip:hover {
+  color: var(--v-fg);
+  text-decoration: underline;
+}
+
+.v-onboarding__btn {
+  padding: 4px 10px;
+  border: 1px solid var(--v-border);
+  border-radius: var(--v-radius);
+  background: var(--v-bg);
+  color: var(--v-fg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.v-onboarding__btn:hover {
+  border-color: var(--v-accent);
+  color: var(--v-accent);
+}
+
+.v-onboarding__btn--primary {
+  border-color: var(--v-accent);
+  background: var(--v-accent);
+  color: #ffffff;
+}
+
+.v-onboarding__btn--primary:hover {
+  background: var(--v-accent);
+  color: #ffffff;
+  filter: brightness(1.08);
+}
+
+.v-onboarding__skip:focus-visible,
+.v-onboarding__btn:focus-visible {
+  outline: var(--v-focus-ring) solid var(--v-accent);
+  outline-offset: 1px;
+}

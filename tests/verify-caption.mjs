@@ -959,6 +959,12 @@ try {
   await sleep(600);
   // 先证明这条断言**有内容**：列表本身得是可滚动的（24 条 × 26px 远超左栏高度），
   // 否则 scrollIntoView 是空转，"选中行可见"永远成立 = 假绿。
+  //
+  // 容差按**一整行高**（26px）算，不是像素级"完全可见"：
+  // scrollIntoView({block:'center'}) 之后，全局 UI（错误条 / BusyBar）随时可能出现，
+  // 把列表可视高度临时压矮十几像素 —— 同一行就从"居中"变成"刚好整行落到框外"
+  // （2026-10-26 实测：距顶 292px / 列表高 ~280）。断言的本意是"切回列表时选中行能被看到"，
+  // 所以允许底部溢出一行；`scrollTop > 0` 那条仍然守着"确实发生了滚动"。
   const listScroll = JSON.parse(
     await page.session.evaluate(`(() => {
       const list = document.querySelector('[data-v="caption-list"]');
@@ -974,7 +980,9 @@ try {
         scrollTop: list.scrollTop,
         selectedClipId: selected === undefined ? null : selected.getAttribute('data-clip-id'),
         visible:
-          rect !== null && rect.top >= listRect.top - 1 && rect.bottom <= listRect.bottom + 1,
+          rect !== null &&
+          rect.top >= listRect.top - 1 &&
+          rect.bottom <= listRect.bottom + 26,
         offsetFromTop: rect === null ? null : Math.round(rect.top - listRect.top),
       });
     })()`),

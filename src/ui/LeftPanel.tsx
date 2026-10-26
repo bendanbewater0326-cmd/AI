@@ -208,10 +208,17 @@ export interface LeftPanelProps {
   onSeek: (frame: number) => void;
   /** 构建时间戳（设置面板的「关于」组要显示；由 App 传下来，面板不重复 fetch）。 */
   buildId: string;
+  /**
+   * 重新打开新手引导（设置面板「关于」组里的入口用；由 App 注入）。
+   *
+   * 可选：左栏只做**透传**，引导是否可用由 App 决定 —— 这样左栏不必知道
+   * `onboarding` 的任何状态（G1/G2 的组件与存储都在 App 那一层）。
+   */
+  onShowOnboarding?: () => void;
 }
 
 export function LeftPanel(props: LeftPanelProps): ReactElement {
-  const { onSeek, buildId } = props;
+  const { onSeek, buildId, onShowOnboarding } = props;
   const [active, setActive] = useState<LeftTabKey>(() => {
     const stored = readStoredTab();
     activeTabMemo = stored;
@@ -296,7 +303,7 @@ export function LeftPanel(props: LeftPanelProps): ReactElement {
           （`veditor:settings:openGroups`）—— 共用 key 会让两边互相改对方的展开状态。
         */}
         <div className="v-tabpane__slot" hidden={active !== 'settings'} data-v="settings-content-slot">
-          <SettingsPanel buildId={buildId} />
+          <SettingsPanel buildId={buildId} onShowOnboarding={onShowOnboarding} />
         </div>
         {active === 'media' ||
         active === 'audio' ||
