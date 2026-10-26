@@ -77,6 +77,24 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
     { key: 'hd', label: '720P 流畅', width: 1280, height: 720 },
     { key: 'vertical', label: '竖屏短视频', width: 1080, height: 1920 },
   ] as const;
+  /**
+   * GIF 规格预设（P1，2026-10-26）。
+   *
+   * **和 MP4 的预设不是一回事**：MP4 预设改的是**工程参数**（导出跟随工程，改工程有影响面，
+   * 所以有 confirm）；GIF 的宽度/帧率是**导出选项**（`gifWidth`/`gifFps` 两个面板内 state），
+   * 不动 doc、零副作用、不需要确认弹窗。
+   *
+   * 高度不传：exporter 里 `targetHeight = round(doc.height * (targetWidth / doc.width))`，
+   * 所以「竖屏动图」在竖屏工程下自然出 360×640，横屏工程下是 360×203 —— 一个预设两种工程都对。
+   *
+   * 码率/画质不可调：exporter 里调色板固定 256 色（`quantize(image.data, 256)`），
+   * 所以档位只靠分辨率 + 帧率区分，不做假的"画质"滑杆。
+   */
+  const GIF_PRESETS = [
+    { key: 'hd', label: '高清动图', width: 720, fps: 20 },
+    { key: 'vertical', label: '竖屏动图', width: 360, fps: 15 },
+    { key: 'sticker', label: '表情包', width: 240, fps: 10 },
+  ] as const;
   const FPS_MILLI_PRESET = 30000;
   const activePreset = EXPORT_PRESETS.find(
     (preset) =>
@@ -99,6 +117,17 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
       if (!okToApply) return;
     }
     store.applyProjectParams(next);
+  }
+
+  // GIF 的"当前档"由 width+fps 反查 —— 不另存 selectedPreset，避免两份状态不同步
+  const activeGifPreset = GIF_PRESETS.find(
+    (preset) => gifWidth === preset.width && gifFps === preset.fps,
+  );
+  const isGifCustom = activeGifPreset === undefined;
+
+  function applyGifPreset(preset: (typeof GIF_PRESETS)[number]): void {
+    setGifWidth(preset.width);
+    setGifFps(preset.fps);
   }
 
   const ephemeral = store.getEphemeral();
@@ -173,7 +202,37 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
       </div>
 
       {format === 'gif' ? (
-        <div className="v-export__row">
+        <>
+          <div className="v-export__presets" role="group" aria-label="GIF 规格" data-v="export-gif-presets">
+            {GIF_PRESETS.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                className="v-export__preset"
+                data-v={`export-gif-preset-${preset.key}`}
+                data-active={activeGifPreset?.key === preset.key}
+                aria-pressed={activeGifPreset?.key === preset.key}
+                disabled={phase === 'running'}
+                title={`${preset.label}（宽 ${preset.width}px · ${preset.fps}fps，高度按工程比例自动算）`}
+                onClick={() => applyGifPreset(preset)}
+              >
+                {preset.label}
+              </button>
+            ))}
+            {/* 自定义是一个「状态指示」而不是动作：手动改下面的宽度/帧率就进入自定义，这里点了也没有意义 */}
+            <button
+              type="button"
+              className="v-export__preset"
+              data-v="export-gif-preset-custom"
+              data-active={isGifCustom}
+              aria-pressed={isGifCustom}
+              disabled
+              title="直接调下面的宽度和帧率，就是自定义"
+            >
+              自定义
+            </button>
+          </div>
+          <div className="v-export__row">
           <label className="v-dialog__field">
             <span>宽度</span>
             <select
@@ -182,6 +241,8 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
               disabled={phase === 'running'}
               onChange={(event) => setGifWidth(Number(event.target.value))}
             >
+              <option value={240}>240</option>
+              <option value={360}>360</option>
               <option value={480}>480</option>
               <option value={720}>720</option>
               <option value={1080}>1080</option>
@@ -197,10 +258,12 @@ export function ExportDialog({ open, onClose }: ExportDialogProps): ReactElement
             >
               <option value={10}>10</option>
               <option value={15}>15</option>
+              <option value={20}>20</option>
               <option value={24}>24</option>
             </select>
           </label>
         </div>
+        </>
       ) : null}
 
       {format === 'png' ? (

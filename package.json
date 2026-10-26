@@ -51,7 +51,8 @@
     "e2e:effect-panel": "node tests/verify-effect-panel.mjs",
     "e2e:inspector-groups": "node tests/verify-inspector-groups.mjs",
     "e2e:sfx": "node tests/verify-audio-panel.mjs",
-    "e2e:onboarding": "node tests/verify-onboarding.mjs"
+    "e2e:onboarding": "node tests/verify-onboarding.mjs",
+    "e2e:gif": "node tests/verify-gif-preset.mjs"
   },
   "dependencies": {
     "gifenc": "^1.0.3",
